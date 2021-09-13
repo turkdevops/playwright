@@ -2409,6 +2409,11 @@ last redirect.
 
 ### option: Page.reload.timeout = %%-navigation-timeout-%%
 
+## property: Page.request
+- type: <[FetchRequest]>
+
+API testing helper associated with this page. Requests made with this API will use page cookies.
+
 ## async method: Page.route
 
 Routing provides the capability to modify network requests that are made by a page.

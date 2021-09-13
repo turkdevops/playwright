@@ -73,6 +73,30 @@ it('should have the correct responseBodySize', async ({ page, server, asset, bro
   expect(sizes.responseBodySize).toBe(fs.statSync(asset('simplezip.json')).size);
 });
 
+it('should have the correct responseBodySize for chunked request', async ({ page, server, asset, browserName, platform }) => {
+  it.fixme(browserName === 'firefox');
+  it.fixme(browserName === 'webkit' && platform !== 'darwin');
+  const content = fs.readFileSync(asset('simplezip.json'));
+  const AMOUNT_OF_CHUNKS = 10;
+  const CHUNK_SIZE = Math.ceil(content.length / AMOUNT_OF_CHUNKS);
+  server.setRoute('/chunked-simplezip.json', (req, resp) => {
+    resp.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Transfer-Encoding': 'chunked' });
+    for (let start = 0; start < content.length; start += CHUNK_SIZE) {
+      const end = Math.min(start + CHUNK_SIZE, content.length);
+      resp.write(content.slice(start, end));
+    }
+    resp.end();
+  });
+  const response = await page.goto(server.PREFIX + '/chunked-simplezip.json');
+  const sizes = await response.request().sizes();
+  // The actual file size is 5100 bytes. The extra 75 bytes are coming from the chunked encoding headers and end bytes.
+  if (browserName === 'webkit')
+    // It should be 5175 there. On the actual network response, the body has a size of 5175.
+    expect(sizes.responseBodySize).toBe(5173);
+  else
+    expect(sizes.responseBodySize).toBe(5175);
+});
+
 it('should have the correct responseBodySize with gzip compression', async ({ page, server, asset }, testInfo) => {
   server.enableGzip('/simplezip.json');
   await page.goto(server.EMPTY_PAGE);

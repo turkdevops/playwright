@@ -2750,6 +2750,11 @@ export interface Page {
   }): Promise<null|Response>;
 
   /**
+   * API testing helper associated with this page. Requests made with this API will use page cookies.
+   */
+  request: FetchRequest;
+
+  /**
    * Routing provides the capability to modify network requests that are made by a page.
    *
    * Once routing is enabled, every request matching the url pattern will stall unless it's continued, fulfilled or aborted.
@@ -6439,6 +6444,11 @@ export interface BrowserContext {
    * Returns all open pages in the context.
    */
   pages(): Array<Page>;
+
+  /**
+   * API testing helper associated with this context. Requests made with this API will use context cookies.
+   */
+  request: FetchRequest;
 
   /**
    * Routing provides the capability to modify network requests that are made by any page in the browser context. Once route
@@ -12608,6 +12618,152 @@ export interface Electron {
 }
 
 /**
+ * This API is used for Web API testing. You can use it to trigger API endpoints, configure micro-services, prepare
+ * environment or the service to your e2e test. When used on [Page] or a [BrowserContext], this API will automatically use
+ * the cookies from the corresponding [BrowserContext]. This means that if you log in using this API, your e2e test will be
+ * logged in and vice versa.
+ */
+export interface FetchRequest {
+  /**
+   * Sends HTTP(S) fetch and returns its response. The method will populate fetch cookies from the context and update context
+   * cookies from the response. The method will automatically follow redirects.
+   * @param urlOrRequest Target URL or Request to get all fetch parameters from.
+   * @param options
+   */
+  fetch(urlOrRequest: string|Request, options?: {
+    /**
+     * Allows to set post data of the fetch.
+     */
+    data?: string|Buffer;
+
+    /**
+     * Allows to set HTTP headers.
+     */
+    headers?: { [key: string]: string; };
+
+    /**
+     * If set changes the fetch method (e.g. PUT or POST). If not specified, GET method is used.
+     */
+    method?: string;
+
+    /**
+     * Request timeout in milliseconds.
+     */
+    timeout?: number;
+  }): Promise<FetchResponse>;
+
+  /**
+   * Sends HTTP(S) GET request and returns its response. The method will populate fetch cookies from the context and update
+   * context cookies from the response. The method will automatically follow redirects.
+   * @param urlOrRequest Target URL or Request to get all fetch parameters from.
+   * @param options
+   */
+  get(urlOrRequest: string|Request, options?: {
+    /**
+     * Allows to set HTTP headers.
+     */
+    headers?: { [key: string]: string; };
+
+    /**
+     * Request timeout in milliseconds.
+     */
+    timeout?: number;
+  }): Promise<FetchResponse>;
+
+  /**
+   * Sends HTTP(S) fetch and returns its response. The method will populate fetch cookies from the context and update context
+   * cookies from the response. The method will automatically follow redirects.
+   * @param urlOrRequest Target URL or Request to get all fetch parameters from.
+   * @param options
+   */
+  post(urlOrRequest: string|Request, options?: {
+    /**
+     * Allows to set post data of the fetch.
+     */
+    data?: string|Buffer;
+
+    /**
+     * Allows to set HTTP headers.
+     */
+    headers?: { [key: string]: string; };
+
+    /**
+     * Request timeout in milliseconds.
+     */
+    timeout?: number;
+  }): Promise<FetchResponse>;
+}
+
+/**
+ * [FetchResponse] class represents responses received from
+ * [fetchRequest.fetch(urlOrRequest[, options])](https://playwright.dev/docs/api/class-fetchrequest#fetch-request-fetch).
+ */
+export interface FetchResponse {
+  /**
+   * Returns the buffer with response body.
+   */
+  body(): Promise<Buffer>;
+
+  /**
+   * Disposes the body of this response. If not called then the body will stay in memory until the context closes.
+   */
+  dispose(): Promise<void>;
+
+  /**
+   * An object with all the response HTTP headers associated with this response.
+   */
+  headers(): { [key: string]: string; };
+
+  /**
+   * An array with all the request HTTP headers associated with this response. Header names are not lower-cased. Headers with
+   * multiple entries, such as `Set-Cookie`, appear in the array multiple times.
+   */
+  headersArray(): Array<{
+    /**
+     * Name of the header.
+     */
+    name: string;
+
+    /**
+     * Value of the header.
+     */
+    value: string;
+  }>;
+
+  /**
+   * Returns the JSON representation of response body.
+   *
+   * This method will throw if the response body is not parsable via `JSON.parse`.
+   */
+  json(): Promise<Serializable>;
+
+  /**
+   * Contains a boolean stating whether the response was successful (status in the range 200-299) or not.
+   */
+  ok(): boolean;
+
+  /**
+   * Contains the status code of the response (e.g., 200 for a success).
+   */
+  status(): number;
+
+  /**
+   * Contains the status text of the response (e.g. usually an "OK" for a success).
+   */
+  statusText(): string;
+
+  /**
+   * Returns the text representation of response body.
+   */
+  text(): Promise<string>;
+
+  /**
+   * Contains the URL of the response.
+   */
+  url(): string;
+}
+
+/**
  * [FileChooser] objects are dispatched by the page in the
  * [page.on('filechooser')](https://playwright.dev/docs/api/class-page#page-event-file-chooser) event.
  *
@@ -13058,10 +13214,26 @@ export interface Request {
 
   /**
    * An array with all the request HTTP headers associated with this request. Unlike
-   * [request.allHeaders()](https://playwright.dev/docs/api/class-request#request-all-headers), header names are not
+   * [request.allHeaders()](https://playwright.dev/docs/api/class-request#request-all-headers), header names are NOT
    * lower-cased. Headers with multiple entries, such as `Set-Cookie`, appear in the array multiple times.
    */
-  headersArray(): Promise<Array<Array<string>>>;
+  headersArray(): Promise<Array<{
+    /**
+     * Name of the header.
+     */
+    name: string;
+
+    /**
+     * Value of the header.
+     */
+    value: string;
+  }>>;
+
+  /**
+   * Returns the value of the header matching the name. The name is case insensitive.
+   * @param name Name of the header.
+   */
+  headerValue(name: string): Promise<null|string>;
 
   /**
    * Whether this request is driving frame's navigation.
@@ -13255,7 +13427,7 @@ export interface Response {
   body(): Promise<Buffer>;
 
   /**
-   * Waits for this response to finish, returns failure error if request failed.
+   * Waits for this response to finish, returns always `null`.
    */
   finished(): Promise<null|Error>;
 
@@ -13273,10 +13445,34 @@ export interface Response {
 
   /**
    * An array with all the request HTTP headers associated with this response. Unlike
-   * [response.allHeaders()](https://playwright.dev/docs/api/class-response#response-all-headers), header names are not
+   * [response.allHeaders()](https://playwright.dev/docs/api/class-response#response-all-headers), header names are NOT
    * lower-cased. Headers with multiple entries, such as `Set-Cookie`, appear in the array multiple times.
    */
-  headersArray(): Promise<Array<Array<string>>>;
+  headersArray(): Promise<Array<{
+    /**
+     * Name of the header.
+     */
+    name: string;
+
+    /**
+     * Value of the header.
+     */
+    value: string;
+  }>>;
+
+  /**
+   * Returns the value of the header matching the name. The name is case insensitive. If multiple headers have the same name
+   * (except `set-cookie`), they are returned as a list separated by `, `. For `set-cookie`, the `\n` separator is used. If
+   * no headers are found, `null` is returned.
+   * @param name Name of the header.
+   */
+  headerValue(name: string): Promise<null|string>;
+
+  /**
+   * Returns all values of the headers matching the name, for example `set-cookie`. The name is case insensitive.
+   * @param name Name of the header.
+   */
+  headerValues(name: string): Promise<Array<string>>;
 
   /**
    * Returns the JSON representation of response body.
@@ -13471,6 +13667,12 @@ export interface Route {
      * is resolved relative to the current working directory.
      */
     path?: string;
+
+    /**
+     * [FetchResponse] to fulfill route's request with. Individual fields of the response (such as headers) can be overridden
+     * using fulfill options.
+     */
+    response?: FetchResponse;
 
     /**
      * Response status code, defaults to `200`.

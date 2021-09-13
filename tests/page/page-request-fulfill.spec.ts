@@ -194,11 +194,10 @@ it('should include the origin header', async ({page, server, isAndroid}) => {
   expect(interceptedRequest.headers()['origin']).toEqual(server.PREFIX);
 });
 
-it('should fulfill with fetch result', async ({page, server}) => {
+it('should fulfill with fetch result', async ({page, server, isElectron}) => {
+  it.fixme(isElectron, 'error: Browser context management is not supported.');
   await page.route('**/*', async route => {
-    // @ts-expect-error
-    const response = await page._fetch(server.PREFIX + '/simple.json');
-    // @ts-expect-error
+    const response = await page.request.get(server.PREFIX + '/simple.json');
     route.fulfill({ response });
   });
   const response = await page.goto(server.EMPTY_PAGE);
@@ -206,12 +205,11 @@ it('should fulfill with fetch result', async ({page, server}) => {
   expect(await response.json()).toEqual({'foo': 'bar'});
 });
 
-it('should fulfill with fetch result and overrides', async ({page, server}) => {
+it('should fulfill with fetch result and overrides', async ({page, server, isElectron}) => {
+  it.fixme(isElectron, 'error: Browser context management is not supported.');
   await page.route('**/*', async route => {
-    // @ts-expect-error
-    const response = await page._fetch(server.PREFIX + '/simple.json');
+    const response = await page.request.get(server.PREFIX + '/simple.json');
     route.fulfill({
-      // @ts-expect-error
       response,
       status: 201,
       headers: {
@@ -225,12 +223,11 @@ it('should fulfill with fetch result and overrides', async ({page, server}) => {
   expect(await response.json()).toEqual({'foo': 'bar'});
 });
 
-it('should fetch original request and fulfill', async ({page, server}) => {
+it('should fetch original request and fulfill', async ({page, server, isElectron}) => {
+  it.fixme(isElectron, 'error: Browser context management is not supported.');
   await page.route('**/*', async route => {
-    // @ts-expect-error
-    const response = await page._fetch(route.request());
+    const response = await page.request.get(route.request());
     route.fulfill({
-      // @ts-expect-error
       response,
     });
   });

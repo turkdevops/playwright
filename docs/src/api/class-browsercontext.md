@@ -849,6 +849,11 @@ Creates a new page in the browser context.
 
 Returns all open pages in the context.
 
+## property: BrowserContext.request
+- type: <[FetchRequest]>
+
+API testing helper associated with this context. Requests made with this API will use context cookies.
+
 ## async method: BrowserContext.route
 
 Routing provides the capability to modify network requests that are made by any page in the browser context. Once route

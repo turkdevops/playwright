@@ -18,7 +18,6 @@ import http from 'http';
 import zlib from 'zlib';
 import { pipeline } from 'stream';
 import { contextTest as it, expect } from './config/browserTest';
-import type { Response } from '..';
 import { suppressCertificateWarning } from './config/utils';
 
 it.skip(({ mode }) => mode !== 'default');
@@ -42,14 +41,26 @@ it.afterAll(() => {
 });
 
 it('should work', async ({context, server}) => {
-  // @ts-expect-error
-  const response: Response = await context._fetch(server.PREFIX + '/simple.json');
+  const response = await context.request.get(server.PREFIX + '/simple.json');
   expect(response.url()).toBe(server.PREFIX + '/simple.json');
   expect(response.status()).toBe(200);
   expect(response.statusText()).toBe('OK');
   expect(response.ok()).toBeTruthy();
   expect(response.url()).toBe(server.PREFIX + '/simple.json');
   expect(response.headers()['content-type']).toBe('application/json; charset=utf-8');
+  expect(response.headersArray()).toContainEqual({ name: 'Content-Type', value: 'application/json; charset=utf-8' });
+  expect(await response.text()).toBe('{"foo": "bar"}\n');
+});
+
+it('fetch should work', async ({context, server}) => {
+  const response = await context.request.fetch(server.PREFIX + '/simple.json');
+  expect(response.url()).toBe(server.PREFIX + '/simple.json');
+  expect(response.status()).toBe(200);
+  expect(response.statusText()).toBe('OK');
+  expect(response.ok()).toBeTruthy();
+  expect(response.url()).toBe(server.PREFIX + '/simple.json');
+  expect(response.headers()['content-type']).toBe('application/json; charset=utf-8');
+  expect(response.headersArray()).toContainEqual({ name: 'Content-Type', value: 'application/json; charset=utf-8' });
   expect(await response.text()).toBe('{"foo": "bar"}\n');
 });
 
@@ -57,9 +68,7 @@ it('should throw on network error', async ({context, server}) => {
   server.setRoute('/test', (req, res) => {
     req.socket.destroy();
   });
-  let error;
-  // @ts-expect-error
-  await context._fetch(server.PREFIX + '/test').catch(e => error = e);
+  const error = await context.request.get(server.PREFIX + '/test').catch(e => e);
   expect(error.message).toContain('socket hang up');
 });
 
@@ -68,9 +77,7 @@ it('should throw on network error after redirect', async ({context, server}) => 
   server.setRoute('/test', (req, res) => {
     req.socket.destroy();
   });
-  let error;
-  // @ts-expect-error
-  await context._fetch(server.PREFIX + '/redirect').catch(e => error = e);
+  const error = await context.request.get(server.PREFIX + '/redirect').catch(e => e);
   expect(error.message).toContain('socket hang up');
 });
 
@@ -84,9 +91,7 @@ it('should throw on network error when sending body', async ({context, server}) 
     res.uncork();
     req.socket.destroy();
   });
-  let error;
-  // @ts-expect-error
-  await context._fetch(server.PREFIX + '/test').catch(e => error = e);
+  const error = await context.request.get(server.PREFIX + '/test').catch(e => e);
   expect(error.message).toContain('Error: aborted');
 });
 
@@ -101,9 +106,7 @@ it('should throw on network error when sending body after redirect', async ({con
     res.uncork();
     req.socket.destroy();
   });
-  let error;
-  // @ts-expect-error
-  await context._fetch(server.PREFIX + '/redirect').catch(e => error = e);
+  const error = await context.request.get(server.PREFIX + '/redirect').catch(e => e);
   expect(error.message).toContain('Error: aborted');
 });
 
@@ -120,8 +123,7 @@ it('should add session cookies to request', async ({context, server}) => {
   }]);
   const [req] = await Promise.all([
     server.waitForRequest('/simple.json'),
-    // @ts-expect-error
-    context._fetch(`http://www.my.playwright.dev:${server.PORT}/simple.json`),
+    context.request.get(`http://www.my.playwright.dev:${server.PORT}/simple.json`),
   ]);
   expect(req.headers.cookie).toEqual('username=John Doe');
 });
@@ -139,8 +141,7 @@ it('should not add context cookie if cookie header passed as a parameter', async
   }]);
   const [req] = await Promise.all([
     server.waitForRequest('/empty.html'),
-    // @ts-expect-error
-    context._fetch(`http://www.my.playwright.dev:${server.PORT}/empty.html`, {
+    context.request.get(`http://www.my.playwright.dev:${server.PORT}/empty.html`, {
       headers: {
         'Cookie': 'foo=bar'
       }
@@ -164,8 +165,7 @@ it('should follow redirects', async ({context, server}) => {
   }]);
   const [req, response] = await Promise.all([
     server.waitForRequest('/simple.json'),
-    // @ts-expect-error
-    context._fetch(`http://www.my.playwright.dev:${server.PORT}/redirect1`),
+    context.request.get(`http://www.my.playwright.dev:${server.PORT}/redirect1`),
   ]);
   expect(req.headers.cookie).toEqual('username=John Doe');
   expect(response.url()).toBe(`http://www.my.playwright.dev:${server.PORT}/simple.json`);
@@ -177,8 +177,7 @@ it('should add cookies from Set-Cookie header', async ({context, page, server}) 
     res.setHeader('Set-Cookie', ['session=value', 'foo=bar; max-age=3600']);
     res.end();
   });
-  // @ts-expect-error
-  await context._fetch(server.PREFIX + '/setcookie.html');
+  await context.request.get(server.PREFIX + '/setcookie.html');
   const cookies = await context.cookies();
   expect(new Set(cookies.map(c => ({ name: c.name, value: c.value })))).toEqual(new Set([
     {
@@ -194,13 +193,12 @@ it('should add cookies from Set-Cookie header', async ({context, page, server}) 
   expect((await page.evaluate(() => document.cookie)).split(';').map(s => s.trim()).sort()).toEqual(['foo=bar', 'session=value']);
 });
 
-it('should not lose body while handling Set-Cookie header', async ({context, page, server}) => {
+it('should not lose body while handling Set-Cookie header', async ({context, server}) => {
   server.setRoute('/setcookie.html', (req, res) => {
     res.setHeader('Set-Cookie', ['session=value', 'foo=bar; max-age=3600']);
     res.end('text content');
   });
-  // @ts-expect-error
-  const response = await context._fetch(server.PREFIX + '/setcookie.html');
+  const response = await context.request.get(server.PREFIX + '/setcookie.html');
   expect(await response.text()).toBe('text content');
 });
 
@@ -220,8 +218,7 @@ it('should handle cookies on redirects', async ({context, server, browserName, i
       server.waitForRequest('/redirect1'),
       server.waitForRequest('/a/b/redirect2'),
       server.waitForRequest('/title.html'),
-      // @ts-expect-error
-      context._fetch(`${server.PREFIX}/redirect1`),
+      context.request.get(`${server.PREFIX}/redirect1`),
     ]);
     expect(req1.headers.cookie).toBeFalsy();
     expect(req2.headers.cookie).toBe('r1=v1');
@@ -232,8 +229,7 @@ it('should handle cookies on redirects', async ({context, server, browserName, i
       server.waitForRequest('/redirect1'),
       server.waitForRequest('/a/b/redirect2'),
       server.waitForRequest('/title.html'),
-      // @ts-expect-error
-      context._fetch(`${server.PREFIX}/redirect1`),
+      context.request.get(`${server.PREFIX}/redirect1`),
     ]);
     expect(req1.headers.cookie).toBe('r1=v1');
     expect(req2.headers.cookie.split(';').map(s => s.trim()).sort()).toEqual(['r1=v1', 'r2=v2']);
@@ -264,6 +260,29 @@ it('should handle cookies on redirects', async ({context, server, browserName, i
   ]));
 });
 
+it('should return raw headers', async ({context, page, server}) => {
+  server.setRoute('/headers', (req, res) => {
+    // Headers array is only supported since Node v14.14.0 so we write directly to the socket.
+    // res.writeHead(200, ['name-a', 'v1','name-b', 'v4','Name-a', 'v2', 'name-A', 'v3']);
+    const conn = res.connection;
+    conn.write('HTTP/1.1 200 OK\r\n');
+    conn.write('Name-A: v1\r\n');
+    conn.write('name-b: v4\r\n');
+    conn.write('Name-a: v2\r\n');
+    conn.write('name-A: v3\r\n');
+    conn.write('\r\n');
+    conn.uncork();
+    conn.end();
+  });
+  const response = await context.request.get(`${server.PREFIX}/headers`);
+  expect(response.status()).toBe(200);
+  const headers = response.headersArray().filter(({ name }) => name.toLowerCase().includes('name-'));
+  expect(headers).toEqual([{ name: 'Name-A', value: 'v1' }, { name: 'name-b', value: 'v4' }, { name: 'Name-a', value: 'v2' }, { name: 'name-A', value: 'v3' }]);
+  // Comma separated values, this matches Response.headers()
+  expect(response.headers()['name-a']).toBe('v1, v2, v3');
+  expect(response.headers()['name-b']).toBe('v4');
+});
+
 it('should work with context level proxy', async ({browserOptions, browserType, contextOptions, server, proxyServer}) => {
   server.setRoute('/target.html', async (req, res) => {
     res.end('<title>Served by the proxy</title>');
@@ -283,8 +302,7 @@ it('should work with context level proxy', async ({browserOptions, browserType, 
 
     const [request, response] = await Promise.all([
       server.waitForRequest('/target.html'),
-      // @ts-expect-error
-      context._fetch(`http://non-existent.com/target.html`)
+      context.request.get(`http://non-existent.com/target.html`)
     ]);
     expect(response.status()).toBe(200);
     expect(request.url).toBe('/target.html');
@@ -305,8 +323,7 @@ it('should pass proxy credentials', async ({browserType, browserOptions, server,
     proxy: { server: `localhost:${proxyServer.PORT}`, username: 'user', password: 'secret' }
   });
   const context = await browser.newContext();
-  // @ts-expect-error
-  const response = await context._fetch('http://non-existent.com/simple.json');
+  const response = await context.request.get('http://non-existent.com/simple.json');
   expect(proxyServer.connectHosts).toContain('non-existent.com:80');
   expect(auth).toBe('Basic ' + Buffer.from('user:secret').toString('base64'));
   expect(await response.json()).toEqual({foo: 'bar'});
@@ -318,8 +335,7 @@ it('should work with http credentials', async ({context, server}) => {
 
   const [request, response] = await Promise.all([
     server.waitForRequest('/empty.html'),
-    // @ts-expect-error
-    context._fetch(server.EMPTY_PAGE, {
+    context.request.get(server.EMPTY_PAGE, {
       headers: {
         'authorization': 'Basic ' + Buffer.from('user:pass').toString('base64')
       }
@@ -329,33 +345,28 @@ it('should work with http credentials', async ({context, server}) => {
   expect(request.url).toBe('/empty.html');
 });
 
-it('should work with setHTTPCredentials', async ({context, browser, server}) => {
+it('should work with setHTTPCredentials', async ({context, server}) => {
   server.setAuth('/empty.html', 'user', 'pass');
-  // @ts-expect-error
-  const response1 = await context._fetch(server.EMPTY_PAGE);
+  const response1 = await context.request.get(server.EMPTY_PAGE);
   expect(response1.status()).toBe(401);
 
   await context.setHTTPCredentials({ username: 'user', password: 'pass' });
-  // @ts-expect-error
-  const response2 = await context._fetch(server.EMPTY_PAGE);
+  const response2 = await context.request.get(server.EMPTY_PAGE);
   expect(response2.status()).toBe(200);
 });
 
-it('should return error with wrong credentials', async ({context, browser, server}) => {
+it('should return error with wrong credentials', async ({context, server}) => {
   server.setAuth('/empty.html', 'user', 'pass');
   await context.setHTTPCredentials({ username: 'user', password: 'wrong' });
-  // @ts-expect-error
-  const response2 = await context._fetch(server.EMPTY_PAGE);
+  const response2 = await context.request.get(server.EMPTY_PAGE);
   expect(response2.status()).toBe(401);
 });
 
 it('should support post data', async ({context, server}) => {
   const [request, response] = await Promise.all([
     server.waitForRequest('/simple.json'),
-    // @ts-expect-error
-    context._fetch(`${server.PREFIX}/simple.json`, {
-      method: 'POST',
-      postData: 'My request'
+    context.request.post(`${server.PREFIX}/simple.json`, {
+      data: 'My request'
     })
   ]);
   expect(request.method).toBe('POST');
@@ -367,8 +378,7 @@ it('should support post data', async ({context, server}) => {
 it('should add default headers', async ({context, server, page}) => {
   const [request] = await Promise.all([
     server.waitForRequest('/empty.html'),
-    // @ts-expect-error
-    context._fetch(server.EMPTY_PAGE)
+    context.request.get(server.EMPTY_PAGE)
   ]);
   expect(request.headers['accept']).toBe('*/*');
   const userAgent = await page.evaluate(() => navigator.userAgent);
@@ -380,8 +390,7 @@ it('should add default headers to redirects', async ({context, server, page}) =>
   server.setRedirect('/redirect', '/empty.html');
   const [request] = await Promise.all([
     server.waitForRequest('/empty.html'),
-    // @ts-expect-error
-    context._fetch(`${server.PREFIX}/redirect`)
+    context.request.get(`${server.PREFIX}/redirect`)
   ]);
   expect(request.headers['accept']).toBe('*/*');
   const userAgent = await page.evaluate(() => navigator.userAgent);
@@ -392,8 +401,7 @@ it('should add default headers to redirects', async ({context, server, page}) =>
 it('should allow to override default headers', async ({context, server, page}) => {
   const [request] = await Promise.all([
     server.waitForRequest('/empty.html'),
-    // @ts-expect-error
-    context._fetch(server.EMPTY_PAGE, {
+    context.request.get(server.EMPTY_PAGE, {
       headers: {
         'User-Agent': 'Playwright',
         'Accept': 'text/html',
@@ -413,8 +421,7 @@ it('should propagate custom headers with redirects', async ({context, server}) =
     server.waitForRequest('/a/redirect1'),
     server.waitForRequest('/b/c/redirect2'),
     server.waitForRequest('/simple.json'),
-    // @ts-expect-error
-    context._fetch(`${server.PREFIX}/a/redirect1`, {headers: {'foo': 'bar'}}),
+    context.request.get(`${server.PREFIX}/a/redirect1`, {headers: {'foo': 'bar'}}),
   ]);
   expect(req1.headers['foo']).toBe('bar');
   expect(req2.headers['foo']).toBe('bar');
@@ -429,8 +436,7 @@ it('should propagate extra http headers with redirects', async ({context, server
     server.waitForRequest('/a/redirect1'),
     server.waitForRequest('/b/c/redirect2'),
     server.waitForRequest('/simple.json'),
-    // @ts-expect-error
-    context._fetch(`${server.PREFIX}/a/redirect1`),
+    context.request.get(`${server.PREFIX}/a/redirect1`),
   ]);
   expect(req1.headers['my-secret']).toBe('Value');
   expect(req2.headers['my-secret']).toBe('Value');
@@ -438,8 +444,7 @@ it('should propagate extra http headers with redirects', async ({context, server
 });
 
 it('should throw on invalid header value', async ({context, server}) => {
-  // @ts-expect-error
-  const error = await context._fetch(`${server.PREFIX}/a/redirect1`, {
+  const error = await context.request.get(`${server.PREFIX}/a/redirect1`, {
     headers: {
       'foo': 'недопустимое значение',
     }
@@ -448,11 +453,9 @@ it('should throw on invalid header value', async ({context, server}) => {
 });
 
 it('should throw on non-http(s) protocol', async ({context}) => {
-  // @ts-expect-error
-  const error1 = await context._fetch(`data:text/plain,test`).catch(e => e);
+  const error1 = await context.request.get(`data:text/plain,test`).catch(e => e);
   expect(error1.message).toContain('Protocol "data:" not supported');
-  // @ts-expect-error
-  const error2 = await context._fetch(`file:///tmp/foo`).catch(e => e);
+  const error2 = await context.request.get(`file:///tmp/foo`).catch(e => e);
   expect(error2.message).toContain('Protocol "file:" not supported');
 });
 
@@ -462,8 +465,7 @@ it('should support https', async ({context, httpsServer}) => {
   process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
   suppressCertificateWarning();
   try {
-    // @ts-expect-error
-    const response = await context._fetch(httpsServer.EMPTY_PAGE);
+    const response = await context.request.get(httpsServer.EMPTY_PAGE);
     expect(response.status()).toBe(200);
   } finally {
     process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = oldValue;
@@ -472,8 +474,7 @@ it('should support https', async ({context, httpsServer}) => {
 
 it('should support ignoreHTTPSErrors', async ({contextFactory, contextOptions, httpsServer}) => {
   const context = await contextFactory({ ...contextOptions, ignoreHTTPSErrors: true });
-  // @ts-expect-error
-  const response = await context._fetch(httpsServer.EMPTY_PAGE);
+  const response = await context.request.get(httpsServer.EMPTY_PAGE);
   expect(response.status()).toBe(200);
 });
 
@@ -482,8 +483,7 @@ it('should resolve url relative to baseURL', async function({server, contextFact
     ...contextOptions,
     baseURL: server.PREFIX,
   });
-  // @ts-expect-error
-  const response = await context._fetch('/empty.html');
+  const response = await context.request.get('/empty.html');
   expect(response.url()).toBe(server.EMPTY_PAGE);
 });
 
@@ -503,8 +503,7 @@ it('should support gzip compression', async function({context, server}) {
     gzip.end();
   });
 
-  // @ts-expect-error
-  const response = await context._fetch(server.PREFIX + '/compressed');
+  const response = await context.request.get(server.PREFIX + '/compressed');
   expect(await response.text()).toBe('Hello, world!');
 });
 
@@ -518,8 +517,7 @@ it('should throw informatibe error on corrupted gzip body', async function({cont
     res.end();
   });
 
-  // @ts-expect-error
-  const error = await context._fetch(server.PREFIX + '/corrupted').catch(e => e);
+  const error = await context.request.get(server.PREFIX + '/corrupted').catch(e => e);
   expect(error.message).toContain(`failed to decompress 'gzip' encoding`);
 });
 
@@ -539,8 +537,7 @@ it('should support brotli compression', async function({context, server}) {
     brotli.end();
   });
 
-  // @ts-expect-error
-  const response = await context._fetch(server.PREFIX + '/compressed');
+  const response = await context.request.get(server.PREFIX + '/compressed');
   expect(await response.text()).toBe('Hello, world!');
 });
 
@@ -554,8 +551,7 @@ it('should throw informatibe error on corrupted brotli body', async function({co
     res.end();
   });
 
-  // @ts-expect-error
-  const error = await context._fetch(server.PREFIX + '/corrupted').catch(e => e);
+  const error = await context.request.get(server.PREFIX + '/corrupted').catch(e => e);
   expect(error.message).toContain(`failed to decompress 'br' encoding`);
 });
 
@@ -575,8 +571,7 @@ it('should support deflate compression', async function({context, server}) {
     deflate.end();
   });
 
-  // @ts-expect-error
-  const response = await context._fetch(server.PREFIX + '/compressed');
+  const response = await context.request.get(server.PREFIX + '/compressed');
   expect(await response.text()).toBe('Hello, world!');
 });
 
@@ -590,8 +585,7 @@ it('should throw informatibe error on corrupted deflate body', async function({c
     res.end();
   });
 
-  // @ts-expect-error
-  const error = await context._fetch(server.PREFIX + '/corrupted').catch(e => e);
+  const error = await context.request.get(server.PREFIX + '/corrupted').catch(e => e);
   expect(error.message).toContain(`failed to decompress 'deflate' encoding`);
 });
 
@@ -603,8 +597,7 @@ it('should support timeout option', async function({context, server}) {
     });
   });
 
-  // @ts-expect-error
-  const error = await context._fetch(server.PREFIX + '/slow', { timeout: 10 }).catch(e => e);
+  const error = await context.request.get(server.PREFIX + '/slow', { timeout: 10 }).catch(e => e);
   expect(error.message).toContain(`Request timed out after 10ms`);
 });
 
@@ -618,14 +611,12 @@ it('should respect timeout after redirects', async function({context, server}) {
   });
 
   context.setDefaultTimeout(100);
-  // @ts-expect-error
-  const error = await context._fetch(server.PREFIX + '/redirect').catch(e => e);
+  const error = await context.request.get(server.PREFIX + '/redirect').catch(e => e);
   expect(error.message).toContain(`Request timed out after 100ms`);
 });
 
 it('should dispose', async function({context, server}) {
-  // @ts-expect-error
-  const response = await context._fetch(server.PREFIX + '/simple.json');
+  const response = await context.request.get(server.PREFIX + '/simple.json');
   expect(await response.json()).toEqual({ foo: 'bar' });
   await response.dispose();
   const error = await response.body().catch(e => e);
@@ -633,17 +624,33 @@ it('should dispose', async function({context, server}) {
 });
 
 it('should dispose when context closes', async function({context, server}) {
-  // @ts-expect-error
-  const response = await context._fetch(server.PREFIX + '/simple.json');
+  const response = await context.request.get(server.PREFIX + '/simple.json');
   expect(await response.json()).toEqual({ foo: 'bar' });
   await context.close();
   const error = await response.body().catch(e => e);
   expect(error.message).toContain('Target page, context or browser has been closed');
 });
 
-it('should throw on invalid first argument', async function({context, server}) {
-  // @ts-expect-error
-  const error = await context._fetch({}).catch(e => e);
+it('should throw on invalid first argument', async function({context}) {
+  const error = await context.request.get({} as any).catch(e => e);
   expect(error.message).toContain('First argument must be either URL string or Request');
 });
 
+it('should override request parameters', async function({context, page, server}) {
+  const [pageReq] = await Promise.all([
+    page.waitForRequest('**/*'),
+    page.goto(server.EMPTY_PAGE)
+  ]);
+  const [req] = await Promise.all([
+    server.waitForRequest('/empty.html'),
+    context.request.post(pageReq, {
+      headers: {
+        'foo': 'bar'
+      },
+      data: 'data'
+    })
+  ]);
+  expect(req.method).toBe('POST');
+  expect(req.headers.foo).toBe('bar');
+  expect((await req.postBody).toString('utf8')).toBe('data');
+});
