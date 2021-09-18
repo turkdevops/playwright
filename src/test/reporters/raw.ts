@@ -17,13 +17,14 @@
 import fs from 'fs';
 import path from 'path';
 import { FullProject } from '../../../types/test';
-import { FullConfig, Location, Suite, TestCase, TestError, TestResult, TestStatus, TestStep } from '../../../types/testReporter';
+import { FullConfig, Location, Suite, TestCase, TestResult, TestStatus, TestStep } from '../../../types/testReporter';
 import { assert, calculateSha1 } from '../../utils/utils';
 import { sanitizeForFilePath } from '../util';
+import { formatResultFailure } from './base';
 import { serializePatterns } from './json';
 
 export type JsonLocation = Location;
-export type JsonError = TestError;
+export type JsonError = string;
 export type JsonStackFrame = { file: string, line: number, column: number };
 
 export type JsonReport = {
@@ -64,13 +65,6 @@ export type JsonTestCase = {
   results: JsonTestResult[];
   ok: boolean;
   outcome: 'skipped' | 'expected' | 'unexpected' | 'flaky';
-};
-
-export type TestAttachment = {
-  name: string;
-  path?: string;
-  body?: Buffer;
-  contentType: string;
 };
 
 export type JsonAttachment = {
@@ -129,23 +123,30 @@ class RawReporter {
       }
       if (!reportFile)
         throw new Error('Internal error, could not create report file');
-      const report: JsonReport = {
-        config: this.config,
-        project: {
-          metadata: project.metadata,
-          name: project.name,
-          outputDir: project.outputDir,
-          repeatEach: project.repeatEach,
-          retries: project.retries,
-          testDir: project.testDir,
-          testIgnore: serializePatterns(project.testIgnore),
-          testMatch: serializePatterns(project.testMatch),
-          timeout: project.timeout,
-        },
-        suites: suite.suites.map(s => this._serializeSuite(s))
-      };
+      const report = this.generateProjectReport(this.config, suite);
       fs.writeFileSync(reportFile, JSON.stringify(report, undefined, 2));
     }
+  }
+
+  generateProjectReport(config: FullConfig, suite: Suite): JsonReport {
+    const project = (suite as any)._projectConfig as FullProject;
+    assert(project, 'Internal Error: Invalid project structure');
+    const report: JsonReport = {
+      config,
+      project: {
+        metadata: project.metadata,
+        name: project.name,
+        outputDir: project.outputDir,
+        repeatEach: project.repeatEach,
+        retries: project.retries,
+        testDir: project.testDir,
+        testIgnore: serializePatterns(project.testIgnore),
+        testMatch: serializePatterns(project.testMatch),
+        timeout: project.timeout,
+      },
+      suites: suite.suites.map(s => this._serializeSuite(s))
+    };
+    return report;
   }
 
   private _serializeSuite(suite: Suite): JsonSuite {
@@ -169,18 +170,18 @@ class RawReporter {
       retries: test.retries,
       ok: test.ok(),
       outcome: test.outcome(),
-      results: test.results.map(r => this._serializeResult(testId, test, r)),
+      results: test.results.map(r => this._serializeResult(test, r)),
     };
   }
 
-  private _serializeResult(testId: string, test: TestCase, result: TestResult): JsonTestResult {
+  private _serializeResult(test: TestCase, result: TestResult): JsonTestResult {
     return {
       retry: result.retry,
       workerIndex: result.workerIndex,
       startTime: result.startTime.toISOString(),
       duration: result.duration,
       status: result.status,
-      error: result.error,
+      error: formatResultFailure(test, result, '').join('').trim(),
       attachments: this._createAttachments(result),
       steps: this._serializeSteps(test, result.steps)
     };
@@ -193,7 +194,7 @@ class RawReporter {
         category: step.category,
         startTime: step.startTime.toISOString(),
         duration: step.duration,
-        error: step.error,
+        error: step.error?.message,
         steps: this._serializeSteps(test, step.steps),
         log: step.data.log || undefined,
       };

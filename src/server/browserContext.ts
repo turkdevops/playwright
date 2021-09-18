@@ -34,6 +34,7 @@ import { Tracing } from './trace/recorder/tracing';
 import { HarRecorder } from './supplements/har/harRecorder';
 import { RecorderSupplement } from './supplements/recorderSupplement';
 import * as consoleApiSource from '../generated/consoleApiSource';
+import { BrowserContextFetchRequest } from './fetch';
 
 export abstract class BrowserContext extends SdkObject {
   static Events = {
@@ -63,7 +64,7 @@ export abstract class BrowserContext extends SdkObject {
   private _origins = new Set<string>();
   readonly _harRecorder: HarRecorder | undefined;
   readonly tracing: Tracing;
-  readonly fetchResponses: Map<string, Buffer> = new Map();
+  readonly fetchRequest: BrowserContextFetchRequest;
 
   constructor(browser: Browser, options: types.BrowserContextOptions, browserContextId: string | undefined) {
     super(browser, 'browser-context');
@@ -78,6 +79,7 @@ export abstract class BrowserContext extends SdkObject {
       this._harRecorder = new HarRecorder(this, {...this._options.recordHar, path: path.join(this._browser.options.artifactsDir, `${createGuid()}.har`)});
 
     this.tracing = new Tracing(this);
+    this.fetchRequest = new BrowserContextFetchRequest(this);
   }
 
   _setSelectors(selectors: Selectors) {
@@ -380,12 +382,6 @@ export abstract class BrowserContext extends SdkObject {
     };
     this.on(BrowserContext.Events.Page, installInPage);
     return Promise.all(this.pages().map(installInPage));
-  }
-
-  storeFetchResponseBody(body: Buffer): string {
-    const uid = createGuid();
-    this.fetchResponses.set(uid, body);
-    return uid;
   }
 }
 

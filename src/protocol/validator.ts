@@ -147,6 +147,23 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
     statusText: tString,
     headers: tArray(tType('NameValue')),
   });
+  scheme.FetchRequestFetchParams = tObject({
+    url: tString,
+    params: tOptional(tArray(tType('NameValue'))),
+    method: tOptional(tString),
+    headers: tOptional(tArray(tType('NameValue'))),
+    postData: tOptional(tBinary),
+    formData: tOptional(tAny),
+    timeout: tOptional(tNumber),
+    failOnStatusCode: tOptional(tBoolean),
+  });
+  scheme.FetchRequestFetchResponseBodyParams = tObject({
+    fetchUid: tString,
+  });
+  scheme.FetchRequestDisposeFetchResponseParams = tObject({
+    fetchUid: tString,
+  });
+  scheme.FetchRequestDisposeParams = tOptional(tObject({}));
   scheme.FetchResponse = tObject({
     fetchUid: tString,
     url: tString,
@@ -176,6 +193,9 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
   });
   scheme.PlaywrightSocksEndParams = tObject({
     uid: tString,
+  });
+  scheme.PlaywrightNewRequestParams = tObject({
+    ignoreHTTPSErrors: tOptional(tBoolean),
   });
   scheme.SelectorsRegisterParams = tObject({
     name: tString,
@@ -392,19 +412,6 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
     name: tString,
     needsHandle: tOptional(tBoolean),
   });
-  scheme.BrowserContextFetchParams = tObject({
-    url: tString,
-    method: tOptional(tString),
-    headers: tOptional(tArray(tType('NameValue'))),
-    postData: tOptional(tBinary),
-    timeout: tOptional(tNumber),
-  });
-  scheme.BrowserContextFetchResponseBodyParams = tObject({
-    fetchUid: tString,
-  });
-  scheme.BrowserContextDisposeFetchResponseParams = tObject({
-    fetchUid: tString,
-  });
   scheme.BrowserContextGrantPermissionsParams = tObject({
     permissions: tArray(tString),
     origin: tOptional(tString),
@@ -558,6 +565,10 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
     delay: tOptional(tNumber),
     button: tOptional(tEnum(['left', 'right', 'middle'])),
     clickCount: tOptional(tNumber),
+  });
+  scheme.PageMouseWheelParams = tObject({
+    deltaX: tNumber,
+    deltaY: tNumber,
   });
   scheme.PageTouchscreenTapParams = tObject({
     x: tNumber,

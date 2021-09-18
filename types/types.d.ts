@@ -1415,6 +1415,11 @@ export interface Page {
    */
   off(event: 'worker', listener: (worker: Worker) => void): this;
 
+  /**
+   * API testing helper associated with this page. Requests made with this API will use page cookies.
+   */
+  _request: FetchRequest;
+
   accessibility: Accessibility;
 
   /**
@@ -2750,11 +2755,6 @@ export interface Page {
   }): Promise<null|Response>;
 
   /**
-   * API testing helper associated with this page. Requests made with this API will use page cookies.
-   */
-  request: FetchRequest;
-
-  /**
    * Routing provides the capability to modify network requests that are made by a page.
    *
    * Once routing is enabled, every request matching the url pattern will stall unless it's continued, fulfilled or aborted.
@@ -3627,7 +3627,9 @@ export interface Page {
     timeout?: number;
 
     /**
-     * A glob pattern, regex pattern or predicate receiving [URL] to match while waiting for the navigation.
+     * A glob pattern, regex pattern or predicate receiving [URL] to match while waiting for the navigation. Note that if the
+     * parameter is a string without wilcard characters, the method will wait for navigation to URL that is exactly equal to
+     * the string.
      */
     url?: string|RegExp|((url: URL) => boolean);
 
@@ -3738,7 +3740,8 @@ export interface Page {
    *
    * Shortcut for main frame's
    * [frame.waitForURL(url[, options])](https://playwright.dev/docs/api/class-frame#frame-wait-for-url).
-   * @param url A glob pattern, regex pattern or predicate receiving [URL] to match while waiting for the navigation.
+   * @param url A glob pattern, regex pattern or predicate receiving [URL] to match while waiting for the navigation. Note that if the parameter is a string without wilcard characters, the method will wait for navigation to URL that is exactly equal to
+   * the string.
    * @param options
    */
   waitForURL(url: string|RegExp|((url: URL) => boolean), options?: {
@@ -5745,7 +5748,9 @@ export interface Frame {
     timeout?: number;
 
     /**
-     * A glob pattern, regex pattern or predicate receiving [URL] to match while waiting for the navigation.
+     * A glob pattern, regex pattern or predicate receiving [URL] to match while waiting for the navigation. Note that if the
+     * parameter is a string without wilcard characters, the method will wait for navigation to URL that is exactly equal to
+     * the string.
      */
     url?: string|RegExp|((url: URL) => boolean);
 
@@ -5775,7 +5780,8 @@ export interface Frame {
    * await frame.waitForURL('**\/target.html');
    * ```
    *
-   * @param url A glob pattern, regex pattern or predicate receiving [URL] to match while waiting for the navigation.
+   * @param url A glob pattern, regex pattern or predicate receiving [URL] to match while waiting for the navigation. Note that if the parameter is a string without wilcard characters, the method will wait for navigation to URL that is exactly equal to
+   * the string.
    * @param options
    */
   waitForURL(url: string|RegExp|((url: URL) => boolean), options?: {
@@ -6224,6 +6230,11 @@ export interface BrowserContext {
   off(event: 'serviceworker', listener: (worker: Worker) => void): this;
 
   /**
+   * API testing helper associated with this context. Requests made with this API will use context cookies.
+   */
+  _request: FetchRequest;
+
+  /**
    * Adds cookies into this browser context. All pages within this context will have these cookies installed. Cookies can be
    * obtained via
    * [browserContext.cookies([urls])](https://playwright.dev/docs/api/class-browsercontext#browser-context-cookies).
@@ -6444,11 +6455,6 @@ export interface BrowserContext {
    * Returns all open pages in the context.
    */
   pages(): Array<Page>;
-
-  /**
-   * API testing helper associated with this context. Requests made with this API will use context cookies.
-   */
-  request: FetchRequest;
 
   /**
    * Routing provides the capability to modify network requests that are made by any page in the browser context. Once route
@@ -10668,6 +10674,7 @@ export const firefox: BrowserType;
 export const webkit: BrowserType;
 export const _electron: Electron;
 export const _android: Android;
+export const _newRequest: () => Promise<FetchRequest>;
 
 // This is required to not export everything by default. See https://github.com/Microsoft/TypeScript/issues/19545#issuecomment-340490459
 export {};
@@ -12625,6 +12632,19 @@ export interface Electron {
  */
 export interface FetchRequest {
   /**
+   * All responses received through
+   * [fetchRequest.fetch(urlOrRequest[, options])](https://playwright.dev/docs/api/class-fetchrequest#fetch-request-fetch),
+   * [fetchRequest.get(urlOrRequest[, options])](https://playwright.dev/docs/api/class-fetchrequest#fetch-request-get),
+   * [fetchRequest.post(urlOrRequest[, options])](https://playwright.dev/docs/api/class-fetchrequest#fetch-request-post) and
+   * other methods are stored in the memory, so that you can later call
+   * [fetchResponse.body()](https://playwright.dev/docs/api/class-fetchresponse#fetch-response-body). This method discards
+   * all stored responses, and makes
+   * [fetchResponse.body()](https://playwright.dev/docs/api/class-fetchresponse#fetch-response-body) throw "Response
+   * disposed" error.
+   */
+  dispose(): Promise<void>;
+
+  /**
    * Sends HTTP(S) fetch and returns its response. The method will populate fetch cookies from the context and update context
    * cookies from the response. The method will automatically follow redirects.
    * @param urlOrRequest Target URL or Request to get all fetch parameters from.
@@ -12632,9 +12652,19 @@ export interface FetchRequest {
    */
   fetch(urlOrRequest: string|Request, options?: {
     /**
-     * Allows to set post data of the fetch.
+     * Allows to set post data of the fetch. If the data parameter is an object, it will be serialized the following way:
+     * - If `content-type` header is set to `application/x-www-form-urlencoded` the object will be serialized as html form
+     *   using `application/x-www-form-urlencoded` encoding.
+     * - If `content-type` header is set to `multipart/form-data` the object will be serialized as html form using
+     *   `multipart/form-data` encoding.
+     * - Otherwise the object will be serialized to json string and `content-type` header will be set to `application/json`.
      */
-    data?: string|Buffer;
+    data?: string|Buffer|Serializable;
+
+    /**
+     * Whether to throw on response codes other than 2xx and 3xx. By default response object is returned for all status codes.
+     */
+    failOnStatusCode?: boolean;
 
     /**
      * Allows to set HTTP headers.
@@ -12645,6 +12675,11 @@ export interface FetchRequest {
      * If set changes the fetch method (e.g. PUT or POST). If not specified, GET method is used.
      */
     method?: string;
+
+    /**
+     * Query parameters to be send with the URL.
+     */
+    params?: { [key: string]: string; };
 
     /**
      * Request timeout in milliseconds.
@@ -12660,9 +12695,19 @@ export interface FetchRequest {
    */
   get(urlOrRequest: string|Request, options?: {
     /**
+     * Whether to throw on response codes other than 2xx and 3xx. By default response object is returned for all status codes.
+     */
+    failOnStatusCode?: boolean;
+
+    /**
      * Allows to set HTTP headers.
      */
     headers?: { [key: string]: string; };
+
+    /**
+     * Query parameters to be send with the URL.
+     */
+    params?: { [key: string]: string; };
 
     /**
      * Request timeout in milliseconds.
@@ -12678,14 +12723,29 @@ export interface FetchRequest {
    */
   post(urlOrRequest: string|Request, options?: {
     /**
-     * Allows to set post data of the fetch.
+     * Allows to set post data of the fetch. If the data parameter is an object, it will be serialized the following way:
+     * - If `content-type` header is set to `application/x-www-form-urlencoded` the object will be serialized as html form
+     *   using `application/x-www-form-urlencoded` encoding.
+     * - If `content-type` header is set to `multipart/form-data` the object will be serialized as html form using
+     *   `multipart/form-data` encoding.
+     * - Otherwise the object will be serialized to json string and `content-type` header will be set to `application/json`.
      */
-    data?: string|Buffer;
+    data?: string|Buffer|Serializable;
+
+    /**
+     * Whether to throw on response codes other than 2xx and 3xx. By default response object is returned for all status codes.
+     */
+    failOnStatusCode?: boolean;
 
     /**
      * Allows to set HTTP headers.
      */
     headers?: { [key: string]: string; };
+
+    /**
+     * Query parameters to be send with the URL.
+     */
+    params?: { [key: string]: string; };
 
     /**
      * Request timeout in milliseconds.
@@ -13155,6 +13215,16 @@ export interface Mouse {
      */
     clickCount?: number;
   }): Promise<void>;
+
+  /**
+   * Dispatches a `wheel` event.
+   *
+   * > NOTE: Wheel events may cause scrolling if they are not handled, and this method does not wait for the scrolling to
+   * finish before returning.
+   * @param deltaX Pixels to scroll horizontally.
+   * @param deltaY Pixels to scroll vertically.
+   */
+  wheel(deltaX: number, deltaY: number): Promise<void>;
 }
 
 /**

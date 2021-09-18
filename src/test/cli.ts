@@ -16,15 +16,14 @@
 
 /* eslint-disable no-console */
 
-import * as commander from 'commander';
-import * as fs from 'fs';
-import * as path from 'path';
+import commander from 'commander';
+import fs from 'fs';
+import path from 'path';
 import type { Config } from './types';
 import { Runner, builtInReporters, BuiltInReporter } from './runner';
 import { stopProfiling, startProfiling } from './profiler';
 import { FilePatternFilter } from './util';
 import { Loader } from './loader';
-import { HtmlBuilder } from './html/htmlBuilder';
 
 const defaultTimeout = 30000;
 const defaultReporter: BuiltInReporter = process.env.CI ? 'dot' : 'list';
@@ -45,6 +44,7 @@ export function addTestCommand(program: commander.CommanderStatic) {
   command.description('Run tests with Playwright Test');
   command.option('--browser <browser>', `Browser to use for tests, one of "all", "chromium", "firefox" or "webkit" (default: "chromium")`);
   command.option('--headed', `Run tests in headed browsers (default: headless)`);
+  command.option('--debug', `Run tests with Playwright Inspector. Shortcut for "PWDEBUG=1" environment variable and "--timeout=0 --maxFailures=1 --headed --workers=1" options`);
   command.option('-c, --config <file>', `Configuration file, or a test directory with optional "${tsConfig}"/"${jsConfig}"`);
   command.option('--forbid-only', `Fail if test.only is called (default: false)`);
   command.option('-g, --grep <grep>', `Only run tests matching this regular expression (default: ".*")`);
@@ -83,32 +83,6 @@ export function addTestCommand(program: commander.CommanderStatic) {
   });
 }
 
-export function addGenerateHtmlCommand(program: commander.CommanderStatic) {
-  const command = program.command('generate-html');
-  command.description('Generate HTML report');
-  command.option('-c, --config <file>', `Configuration file, or a test directory with optional "${tsConfig}"/"${jsConfig}"`);
-  command.option('--output <dir>', `Folder for output artifacts (default: "playwright-report")`, 'playwright-report');
-  command.action(async opts => {
-    const output = opts.output;
-    delete opts.output;
-    const loader = await createLoader(opts);
-    const outputFolders = new Set(loader.projects().map(p => p.config.outputDir));
-    const reportFiles = new Set<string>();
-    for (const outputFolder of outputFolders) {
-      const reportFolder = path.join(outputFolder, 'report');
-      const files = fs.readdirSync(reportFolder).filter(f => f.endsWith('.report'));
-      for (const file of files)
-        reportFiles.add(path.join(reportFolder, file));
-    }
-    new HtmlBuilder([...reportFiles], output, loader.fullConfig().rootDir);
-  }).on('--help', () => {
-    console.log('');
-    console.log('Examples:');
-    console.log('');
-    console.log('  $ generate-report');
-  });
-}
-
 async function createLoader(opts: { [key: string]: any }): Promise<Loader> {
   if (opts.browser) {
     const browserOpt = opts.browser.toLowerCase();
@@ -124,8 +98,14 @@ async function createLoader(opts: { [key: string]: any }): Promise<Loader> {
   }
 
   const overrides = overridesFromOptions(opts);
-  if (opts.headed)
+  if (opts.headed || opts.debug)
     overrides.use = { headless: false };
+  if (opts.debug) {
+    overrides.maxFailures = 1;
+    overrides.timeout = 0;
+    overrides.workers = 1;
+    process.env.PWDEBUG = '1';
+  }
   const loader = new Loader(defaultConfig, overrides);
 
   async function loadConfig(configFile: string) {
