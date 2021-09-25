@@ -15,7 +15,7 @@
  */
 
 import { TestInfo, test as base } from './stable-test-runner';
-import { spawn } from 'child_process';
+import { CommonFixtures, commonFixtures } from '../config/commonFixtures';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -91,39 +91,9 @@ async function writeFiles(testInfo: TestInfo, files: Files) {
   return baseDir;
 }
 
-async function runTSC(baseDir: string): Promise<TSCResult> {
-  const tscProcess = spawn('npx', ['tsc', '-p', baseDir], {
-    cwd: baseDir,
-    shell: true,
-  });
-  let output = '';
-  tscProcess.stderr.on('data', chunk => {
-    output += String(chunk);
-    if (process.env.PW_RUNNER_DEBUG)
-      process.stderr.write(String(chunk));
-  });
-  tscProcess.stdout.on('data', chunk => {
-    output += String(chunk);
-    if (process.env.PW_RUNNER_DEBUG)
-      process.stdout.write(String(chunk));
-  });
-  const status = await new Promise<number>(x => tscProcess.on('close', x));
-  return {
-    exitCode: status,
-    output,
-  };
-}
-
-async function runPlaywrightTest(baseDir: string, params: any, env: Env, options: RunOptions): Promise<RunResult> {
+async function runPlaywrightTest(childProcess: CommonFixtures['childProcess'], baseDir: string, params: any, env: Env, options: RunOptions): Promise<RunResult> {
   const paramList = [];
-  let additionalArgs = '';
   for (const key of Object.keys(params)) {
-    if (key === 'args') {
-      additionalArgs = params[key];
-      continue;
-    }
-    if (key === 'usesCustomOutputDir')
-      continue;
     for (const value of Array.isArray(params[key]) ? params[key] : [params[key]]) {
       const k = key.startsWith('-') ? key : '--' + key;
       paramList.push(params[key] === true ? `${k}` : `${k}=${value}`);
@@ -131,18 +101,19 @@ async function runPlaywrightTest(baseDir: string, params: any, env: Env, options
   }
   const outputDir = path.join(baseDir, 'test-results');
   const reportFile = path.join(outputDir, 'report.json');
-  const args = [path.join(__dirname, '..', '..', 'lib', 'cli', 'cli.js'), 'test'];
-  if (!params.usesCustomOutputDir)
+  const args = ['node', path.join(__dirname, '..', '..', 'lib', 'cli', 'cli.js'), 'test'];
+  if (!options.usesCustomOutputDir)
     args.push('--output=' + outputDir);
   args.push(
       '--reporter=dot,json',
       '--workers=2',
       ...paramList
   );
-  if (additionalArgs)
-    args.push(...additionalArgs);
+  if (options.additionalArgs)
+    args.push(...options.additionalArgs);
   const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'playwright-test-cache-'));
-  const testProcess = spawn('node', args, {
+  const testProcess = childProcess({
+    command: args,
     env: {
       ...process.env,
       PLAYWRIGHT_JSON_OUTPUT_NAME: reportFile,
@@ -151,28 +122,19 @@ async function runPlaywrightTest(baseDir: string, params: any, env: Env, options
       PWTEST_SKIP_TEST_OUTPUT: '1',
       ...env,
     },
-    cwd: baseDir
+    cwd: baseDir,
   });
-  let output = '';
   let didSendSigint = false;
-  testProcess.stderr.on('data', chunk => {
-    output += String(chunk);
-    if (process.env.PW_RUNNER_DEBUG)
-      process.stderr.write(String(chunk));
-  });
-  testProcess.stdout.on('data', chunk => {
-    output += String(chunk);
-    if (options.sendSIGINTAfter && !didSendSigint && countTimes(output, '%%SEND-SIGINT%%') >= options.sendSIGINTAfter) {
+  testProcess.onOutput = () => {
+    if (options.sendSIGINTAfter && !didSendSigint && countTimes(testProcess.output, '%%SEND-SIGINT%%') >= options.sendSIGINTAfter) {
       didSendSigint = true;
-      process.kill(testProcess.pid, 'SIGINT');
+      process.kill(testProcess.process.pid, 'SIGINT');
     }
-    if (process.env.PW_RUNNER_DEBUG)
-      process.stdout.write(String(chunk));
-  });
-  const status = await new Promise<number>(x => testProcess.on('close', x));
+  };
+  const { exitCode } = await testProcess.exited;
   await removeFolderAsync(cacheDir);
 
-  const outputString = output.toString();
+  const outputString = testProcess.output.toString();
   const summary = (re: RegExp) => {
     let result = 0;
     let match = re.exec(outputString);
@@ -190,7 +152,7 @@ async function runPlaywrightTest(baseDir: string, params: any, env: Env, options
   try {
     report = JSON.parse(fs.readFileSync(reportFile).toString());
   } catch (e) {
-    output += '\n' + e.toString();
+    testProcess.output += '\n' + e.toString();
   }
 
   const results = [];
@@ -209,8 +171,8 @@ async function runPlaywrightTest(baseDir: string, params: any, env: Env, options
     visitSuites(report.suites);
 
   return {
-    exitCode: status,
-    output,
+    exitCode,
+    output: testProcess.output,
     passed,
     failed,
     flaky,
@@ -222,6 +184,8 @@ async function runPlaywrightTest(baseDir: string, params: any, env: Env, options
 
 type RunOptions = {
   sendSIGINTAfter?: number;
+  usesCustomOutputDir?: boolean;
+  additionalArgs?: string[];
 };
 type Fixtures = {
   writeFiles: (files: Files) => Promise<string>;
@@ -229,31 +193,30 @@ type Fixtures = {
   runTSC: (files: Files) => Promise<TSCResult>;
 };
 
-export const test = base.extend<Fixtures>({
+const common = base.extend<CommonFixtures>(commonFixtures as any);
+export const test = common.extend<Fixtures>({
   writeFiles: async ({}, use, testInfo) => {
     await use(files => writeFiles(testInfo, files));
   },
 
-  runInlineTest: async ({}, use, testInfo: TestInfo) => {
-    let runResult: RunResult | undefined;
+  runInlineTest: async ({ childProcess }, use, testInfo: TestInfo) => {
     await use(async (files: Files, params: Params = {}, env: Env = {}, options: RunOptions = {}) => {
       const baseDir = await writeFiles(testInfo, files);
-      runResult = await runPlaywrightTest(baseDir, params, env, options);
-      return runResult;
+      return await runPlaywrightTest(childProcess, baseDir, params, env, options);
     });
-    if (testInfo.status !== testInfo.expectedStatus && runResult && !process.env.PW_RUNNER_DEBUG)
-      console.log('\n' + runResult.output + '\n');
   },
 
-  runTSC: async ({}, use, testInfo) => {
-    let tscResult: TSCResult | undefined;
+  runTSC: async ({ childProcess }, use, testInfo) => {
     await use(async files => {
       const baseDir = await writeFiles(testInfo, { 'tsconfig.json': JSON.stringify(TSCONFIG), ...files });
-      tscResult = await runTSC(baseDir);
-      return tscResult;
+      const tsc = childProcess({
+        command: ['npx', 'tsc', '-p', baseDir],
+        cwd: baseDir,
+        shell: true,
+      });
+      const { exitCode } = await tsc.exited;
+      return { exitCode, output: tsc.output };
     });
-    if (testInfo.status !== testInfo.expectedStatus && tscResult && !process.env.PW_RUNNER_DEBUG)
-      console.log('\n' + tscResult.output + '\n');
   },
 });
 

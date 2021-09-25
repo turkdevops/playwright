@@ -75,6 +75,13 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
     value: tType('SerializedValue'),
     handles: tArray(tChannel('*')),
   });
+  scheme.ExpectedTextValue = tObject({
+    string: tOptional(tString),
+    regexSource: tOptional(tString),
+    regexFlags: tOptional(tString),
+    matchSubstring: tOptional(tBoolean),
+    normalizeWhiteSpace: tOptional(tBoolean),
+  });
   scheme.AXNode = tObject({
     role: tString,
     name: tString,
@@ -195,7 +202,21 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
     uid: tString,
   });
   scheme.PlaywrightNewRequestParams = tObject({
+    baseURL: tOptional(tString),
+    userAgent: tOptional(tString),
     ignoreHTTPSErrors: tOptional(tBoolean),
+    extraHTTPHeaders: tOptional(tArray(tType('NameValue'))),
+    httpCredentials: tOptional(tObject({
+      username: tString,
+      password: tString,
+    })),
+    proxy: tOptional(tObject({
+      server: tString,
+      bypass: tOptional(tString),
+      username: tOptional(tString),
+      password: tOptional(tString),
+    })),
+    timeout: tOptional(tNumber),
   });
   scheme.SelectorsRegisterParams = tObject({
     name: tString,
@@ -846,6 +867,9 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
     timeout: tOptional(tNumber),
     trial: tOptional(tBoolean),
   });
+  scheme.FrameWaitForTimeoutParams = tObject({
+    timeout: tNumber,
+  });
   scheme.FrameWaitForFunctionParams = tObject({
     expression: tString,
     isFunction: tOptional(tBoolean),
@@ -858,6 +882,17 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
     strict: tOptional(tBoolean),
     timeout: tOptional(tNumber),
     state: tOptional(tEnum(['attached', 'detached', 'visible', 'hidden'])),
+  });
+  scheme.FrameExpectParams = tObject({
+    selector: tString,
+    expression: tString,
+    expressionArg: tOptional(tAny),
+    expectedText: tOptional(tArray(tType('ExpectedTextValue'))),
+    expectedNumber: tOptional(tNumber),
+    expectedValue: tOptional(tType('SerializedArgument')),
+    useInnerText: tOptional(tBoolean),
+    isNot: tOptional(tBoolean),
+    timeout: tOptional(tNumber),
   });
   scheme.WorkerEvaluateExpressionParams = tObject({
     expression: tString,

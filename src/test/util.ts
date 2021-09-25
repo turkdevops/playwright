@@ -14,55 +14,13 @@
  * limitations under the License.
  */
 
-import type { TestInfoImpl } from './types';
 import util from 'util';
 import path from 'path';
 import url from 'url';
 import type { TestError, Location } from './types';
 import { default as minimatch } from 'minimatch';
-import { errors } from '../..';
-
-export async function pollUntilDeadline(testInfo: TestInfoImpl, func: (remainingTime: number) => Promise<boolean>, pollTime: number | undefined, deadlinePromise: Promise<void>): Promise<void> {
-  let defaultExpectTimeout = testInfo.project.expect?.timeout;
-  if (typeof defaultExpectTimeout === 'undefined')
-    defaultExpectTimeout = 5000;
-  pollTime = pollTime === 0 ? 0 : pollTime || defaultExpectTimeout;
-  const deadline = pollTime ? monotonicTime() + pollTime : 0;
-
-  let aborted = false;
-  const abortedPromise = deadlinePromise.then(() => {
-    aborted = true;
-    return true;
-  });
-
-  const pollIntervals = [100, 250, 500];
-  let attempts = 0;
-  while (!aborted) {
-    const remainingTime = deadline ? deadline - monotonicTime() : 1000 * 3600 * 24;
-    if (remainingTime <= 0)
-      break;
-
-    try {
-      // Either aborted, or func() returned truthy.
-      const result = await Promise.race([
-        func(remainingTime),
-        abortedPromise,
-      ]);
-      if (result)
-        return;
-    } catch (e) {
-      if (e instanceof errors.TimeoutError)
-        return;
-      throw e;
-    }
-
-    let timer: NodeJS.Timer;
-    const timeoutPromise = new Promise(f => timer = setTimeout(f, pollIntervals[attempts++] || 1000));
-    await Promise.race([abortedPromise, timeoutPromise]);
-    clearTimeout(timer!);
-  }
-}
-
+import debug from 'debug';
+import { isRegExp } from '../utils/utils';
 
 export function serializeError(error: Error | any): TestError {
   if (error instanceof Error) {
@@ -79,10 +37,6 @@ export function serializeError(error: Error | any): TestError {
 export function monotonicTime(): number {
   const [seconds, nanoseconds] = process.hrtime();
   return seconds * 1000 + (nanoseconds / 1000000 | 0);
-}
-
-export function isRegExp(e: any): e is RegExp {
-  return e && typeof e === 'object' && (e instanceof RegExp || Object.prototype.toString.call(e) === '[object RegExp]');
 }
 
 export type Matcher = (value: string) => boolean;
@@ -189,3 +143,5 @@ export function expectType(receiver: any, type: string, matcherName: string) {
 export function sanitizeForFilePath(s: string) {
   return s.replace(/[\x00-\x2F\x3A-\x40\x5B-\x60\x7B-\x7F]+/g, '-');
 }
+
+export const debugTest = debug('pw:test');
