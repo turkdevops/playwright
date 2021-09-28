@@ -704,7 +704,7 @@ export class Frame extends SdkObject {
     return this._page.selectors.query(this, selector, options);
   }
 
-  async waitForSelector(metadata: CallMetadata, selector: string, options: types.WaitForElementOptions = {}): Promise<dom.ElementHandle<Element> | null> {
+  async waitForSelector(metadata: CallMetadata, selector: string, options: types.WaitForElementOptions & { omitReturnValue?: boolean } = {}): Promise<dom.ElementHandle<Element> | null> {
     const controller = new ProgressController(metadata, this);
     if ((options as any).visibility)
       throw new Error('options.visibility is not supported, did you mean options.state?');
@@ -714,7 +714,7 @@ export class Frame extends SdkObject {
     if (!['attached', 'detached', 'visible', 'hidden'].includes(state))
       throw new Error(`state: expected one of (attached|detached|visible|hidden)`);
     const info = this._page.parseSelector(selector, options);
-    const task = dom.waitForSelectorTask(info, state);
+    const task = dom.waitForSelectorTask(info, state, options.omitReturnValue);
     return controller.run(async progress => {
       progress.log(`waiting for selector "${selector}"${state === 'attached' ? '' : ' to be ' + state}`);
       while (progress.isRunning()) {
@@ -1256,6 +1256,7 @@ export class Frame extends SdkObject {
           return poller((progress, continuePolling) => {
             if (querySelectorAll) {
               const elements = injected.querySelectorAll(info.parsed, document);
+              progress.logRepeating(`  selector resolved to ${elements.length} element${elements.length === 1 ? '' : 's'}`);
               return callback(progress, elements[0], taskData as T, elements, continuePolling);
             }
 
@@ -1336,7 +1337,7 @@ export class Frame extends SdkObject {
   async extendInjectedScript(source: string, arg?: any): Promise<js.JSHandle> {
     const context = await this._context('main');
     const injectedScriptHandle = await context.injectedScript();
-    return injectedScriptHandle.evaluateHandle((injectedScript, {source, arg}) => {
+    return injectedScriptHandle.evaluateHandle((injectedScript, { source, arg }) => {
       return injectedScript.extend(source, arg);
     }, { source, arg });
   }

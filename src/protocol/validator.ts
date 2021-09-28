@@ -42,7 +42,6 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
   scheme.Metadata = tObject({
     stack: tOptional(tArray(tType('StackFrame'))),
     apiName: tOptional(tString),
-    collectLogs: tOptional(tBoolean),
   });
   scheme.Point = tObject({
     x: tNumber,
@@ -882,6 +881,7 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
     strict: tOptional(tBoolean),
     timeout: tOptional(tNumber),
     state: tOptional(tEnum(['attached', 'detached', 'visible', 'hidden'])),
+    omitReturnValue: tOptional(tBoolean),
   });
   scheme.FrameExpectParams = tObject({
     selector: tString,

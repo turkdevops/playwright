@@ -23,7 +23,7 @@ import zlib from 'zlib';
 import { HTTPCredentials } from '../../types/types';
 import { NameValue, NewRequestOptions } from '../common/types';
 import { TimeoutSettings } from '../utils/timeoutSettings';
-import { createGuid, isFilePayload, monotonicTime } from '../utils/utils';
+import { createGuid, getPlaywrightVersion, isFilePayload, monotonicTime } from '../utils/utils';
 import { BrowserContext } from './browserContext';
 import { MultipartFormData } from './formData';
 import { SdkObject } from './instrumentation';
@@ -91,7 +91,7 @@ export abstract class FetchRequest extends SdkObject {
       headers['accept-encoding'] = 'gzip,deflate,br';
 
       if (defaults.extraHTTPHeaders) {
-        for (const {name, value} of defaults.extraHTTPHeaders)
+        for (const { name, value } of defaults.extraHTTPHeaders)
           headers[name.toLowerCase()] = value;
       }
 
@@ -235,7 +235,7 @@ export abstract class FetchRequest extends SdkObject {
           const auth = response.headers['www-authenticate'];
           const credentials = this._defaultOptions().httpCredentials;
           if (auth?.trim().startsWith('Basic ') && credentials) {
-            const {username, password} = credentials;
+            const { username, password } = credentials;
             const encoded = Buffer.from(`${username || ''}:${password || ''}`).toString('base64');
             options.headers!['authorization'] = `Basic ${encoded}`;
             fulfill(this._sendRequest(url, options, postData));
@@ -352,7 +352,7 @@ export class GlobalFetchRequest extends FetchRequest {
     }
     this._options = {
       baseURL: options.baseURL,
-      userAgent: options.userAgent || '',
+      userAgent: options.userAgent || `Playwright/${getPlaywrightVersion()}`,
       extraHTTPHeaders: options.extraHTTPHeaders,
       ignoreHTTPSErrors: !!options.ignoreHTTPSErrors,
       httpCredentials: options.httpCredentials,

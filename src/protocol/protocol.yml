@@ -29,7 +29,6 @@ Metadata:
       type: array?
       items: StackFrame
     apiName: string?
-    collectLogs: boolean?
 
 
 Point:
@@ -1747,6 +1746,7 @@ Frame:
           - detached
           - visible
           - hidden
+        omitReturnValue: boolean?
       returns:
         element: ElementHandle?
       tracing:

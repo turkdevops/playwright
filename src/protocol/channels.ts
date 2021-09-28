@@ -33,7 +33,6 @@ export type StackFrame = {
 export type Metadata = {
   stack?: StackFrame[],
   apiName?: string,
-  collectLogs?: boolean,
 };
 
 export type Point = {
@@ -2172,11 +2171,13 @@ export type FrameWaitForSelectorParams = {
   strict?: boolean,
   timeout?: number,
   state?: 'attached' | 'detached' | 'visible' | 'hidden',
+  omitReturnValue?: boolean,
 };
 export type FrameWaitForSelectorOptions = {
   strict?: boolean,
   timeout?: number,
   state?: 'attached' | 'detached' | 'visible' | 'hidden',
+  omitReturnValue?: boolean,
 };
 export type FrameWaitForSelectorResult = {
   element?: ElementHandleChannel,
