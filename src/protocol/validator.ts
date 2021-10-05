@@ -147,6 +147,15 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
     })),
     value: tOptional(tType('SerializedValue')),
   });
+  scheme.FormField = tObject({
+    name: tString,
+    value: tOptional(tString),
+    file: tOptional(tObject({
+      name: tString,
+      mimeType: tString,
+      buffer: tBinary,
+    })),
+  });
   scheme.InterceptedResponse = tObject({
     request: tChannel('Request'),
     status: tNumber,
@@ -159,7 +168,9 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
     method: tOptional(tString),
     headers: tOptional(tArray(tType('NameValue'))),
     postData: tOptional(tBinary),
-    formData: tOptional(tAny),
+    jsonData: tOptional(tAny),
+    formData: tOptional(tArray(tType('NameValue'))),
+    multipartData: tOptional(tArray(tType('FormField'))),
     timeout: tOptional(tNumber),
     failOnStatusCode: tOptional(tBoolean),
     ignoreHTTPSErrors: tOptional(tBoolean),
@@ -167,6 +178,7 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
   scheme.FetchRequestFetchResponseBodyParams = tObject({
     fetchUid: tString,
   });
+  scheme.FetchRequestStorageStateParams = tOptional(tObject({}));
   scheme.FetchRequestDisposeFetchResponseParams = tObject({
     fetchUid: tString,
   });
@@ -217,6 +229,10 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
       password: tOptional(tString),
     })),
     timeout: tOptional(tNumber),
+    storageState: tOptional(tObject({
+      cookies: tArray(tType('NetworkCookie')),
+      origins: tArray(tType('OriginStorage')),
+    })),
   });
   scheme.SelectorsRegisterParams = tObject({
     name: tString,
@@ -1080,6 +1096,7 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
     state: tOptional(tEnum(['attached', 'detached', 'visible', 'hidden'])),
   });
   scheme.RequestResponseParams = tOptional(tObject({}));
+  scheme.RequestRawRequestHeadersParams = tOptional(tObject({}));
   scheme.RouteAbortParams = tObject({
     errorCode: tOptional(tString),
   });
@@ -1112,7 +1129,6 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
   scheme.ResponseBodyParams = tOptional(tObject({}));
   scheme.ResponseSecurityDetailsParams = tOptional(tObject({}));
   scheme.ResponseServerAddrParams = tOptional(tObject({}));
-  scheme.ResponseRawRequestHeadersParams = tOptional(tObject({}));
   scheme.ResponseRawResponseHeadersParams = tOptional(tObject({}));
   scheme.ResponseSizesParams = tOptional(tObject({}));
   scheme.SecurityDetails = tObject({

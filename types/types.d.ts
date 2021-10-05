@@ -18,6 +18,7 @@ import { Protocol } from './protocol';
 import { ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import { Readable } from 'stream';
+import { ReadStream } from 'fs';
 import { Serializable, EvaluationArgument, PageFunction, PageFunctionOn, SmartHandle, ElementHandleForTag, BindingSource } from './structs';
 
 type PageWaitForSelectorOptionsNotHidden = PageWaitForSelectorOptions & {
@@ -12682,12 +12683,9 @@ export interface FetchRequest {
    */
   fetch(urlOrRequest: string|Request, options?: {
     /**
-     * Allows to set post data of the fetch. If the data parameter is an object, it will be serialized the following way:
-     * - If `content-type` header is set to `application/x-www-form-urlencoded` the object will be serialized as html form
-     *   using `application/x-www-form-urlencoded` encoding.
-     * - If `content-type` header is set to `multipart/form-data` the object will be serialized as html form using
-     *   `multipart/form-data` encoding.
-     * - Otherwise the object will be serialized to json string and `content-type` header will be set to `application/json`.
+     * Allows to set post data of the request. If the data parameter is an object, it will be serialized to json string and
+     * `content-type` header will be set to `application/json` if not explicitly set. Otherwise the `content-type` header will
+     * be set to `application/octet-stream` if not explicitly set.
      */
     data?: string|Buffer|Serializable;
 
@@ -12695,6 +12693,13 @@ export interface FetchRequest {
      * Whether to throw on response codes other than 2xx and 3xx. By default response object is returned for all status codes.
      */
     failOnStatusCode?: boolean;
+
+    /**
+     * Provides an object that will be serialized as html form using `application/x-www-form-urlencoded` encoding and sent as
+     * this request body. If this parameter is specified `content-type` header will be set to
+     * `application/x-www-form-urlencoded` unless explicitly provided.
+     */
+    form?: { [key: string]: string|number|boolean; };
 
     /**
      * Allows to set HTTP headers.
@@ -12710,6 +12715,29 @@ export interface FetchRequest {
      * If set changes the fetch method (e.g. PUT or POST). If not specified, GET method is used.
      */
     method?: string;
+
+    /**
+     * Provides an object that will be serialized as html form using `multipart/form-data` encoding and sent as this request
+     * body. If this parameter is specified `content-type` header will be set to `multipart/form-data` unless explicitly
+     * provided. File values can be passed either as [`fs.ReadStream`](https://nodejs.org/api/fs.html#fs_class_fs_readstream)
+     * or as file-like object containing file name, mime-type and its content.
+     */
+    multipart?: { [key: string]: string|number|boolean|ReadStream|{
+      /**
+       * File name
+       */
+      name: string;
+
+      /**
+       * File type
+       */
+      mimeType: string;
+
+      /**
+       * File content
+       */
+      buffer: Buffer;
+    }; };
 
     /**
      * Query parameters to be send with the URL.
@@ -12763,12 +12791,9 @@ export interface FetchRequest {
    */
   post(urlOrRequest: string|Request, options?: {
     /**
-     * Allows to set post data of the fetch. If the data parameter is an object, it will be serialized the following way:
-     * - If `content-type` header is set to `application/x-www-form-urlencoded` the object will be serialized as html form
-     *   using `application/x-www-form-urlencoded` encoding.
-     * - If `content-type` header is set to `multipart/form-data` the object will be serialized as html form using
-     *   `multipart/form-data` encoding.
-     * - Otherwise the object will be serialized to json string and `content-type` header will be set to `application/json`.
+     * Allows to set post data of the request. If the data parameter is an object, it will be serialized to json string and
+     * `content-type` header will be set to `application/json` if not explicitly set. Otherwise the `content-type` header will
+     * be set to `application/octet-stream` if not explicitly set.
      */
     data?: string|Buffer|Serializable;
 
@@ -12776,6 +12801,13 @@ export interface FetchRequest {
      * Whether to throw on response codes other than 2xx and 3xx. By default response object is returned for all status codes.
      */
     failOnStatusCode?: boolean;
+
+    /**
+     * Provides an object that will be serialized as html form using `application/x-www-form-urlencoded` encoding and sent as
+     * this request body. If this parameter is specified `content-type` header will be set to
+     * `application/x-www-form-urlencoded` unless explicitly provided.
+     */
+    form?: { [key: string]: string|number|boolean; };
 
     /**
      * Allows to set HTTP headers.
@@ -12788,6 +12820,29 @@ export interface FetchRequest {
     ignoreHTTPSErrors?: boolean;
 
     /**
+     * Provides an object that will be serialized as html form using `multipart/form-data` encoding and sent as this request
+     * body. If this parameter is specified `content-type` header will be set to `multipart/form-data` unless explicitly
+     * provided. File values can be passed either as [`fs.ReadStream`](https://nodejs.org/api/fs.html#fs_class_fs_readstream)
+     * or as file-like object containing file name, mime-type and its content.
+     */
+    multipart?: { [key: string]: string|number|boolean|ReadStream|{
+      /**
+       * File name
+       */
+      name: string;
+
+      /**
+       * File type
+       */
+      mimeType: string;
+
+      /**
+       * File content
+       */
+      buffer: Buffer;
+    }; };
+
+    /**
      * Query parameters to be send with the URL.
      */
     params?: { [key: string]: string; };
@@ -12797,6 +12852,50 @@ export interface FetchRequest {
      */
     timeout?: number;
   }): Promise<FetchResponse>;
+
+  /**
+   * Returns storage state for this request context, contains current cookies and local storage snapshot if it was passed to
+   * the constructor.
+   * @param options
+   */
+  storageState(options?: {
+    /**
+     * The file path to save the storage state to. If `path` is a relative path, then it is resolved relative to current
+     * working directory. If no path is provided, storage state is still returned, but won't be saved to the disk.
+     */
+    path?: string;
+  }): Promise<{
+    cookies: Array<{
+      name: string;
+
+      value: string;
+
+      domain: string;
+
+      path: string;
+
+      /**
+       * Unix time in seconds.
+       */
+      expires: number;
+
+      httpOnly: boolean;
+
+      secure: boolean;
+
+      sameSite: "Strict"|"Lax"|"None";
+    }>;
+
+    origins: Array<{
+      origin: string;
+
+      localStorage: Array<{
+        name: string;
+
+        value: string;
+      }>;
+    }>;
+  }>;
 }
 
 /**
@@ -13333,6 +13432,51 @@ export const _newRequest: (options?: {
      * Optional password to use if HTTP proxy requires authentication.
      */
     password?: string;
+  };
+
+  /**
+   * Populates context with given storage state. This option can be used to initialize context with logged-in information
+   * obtained via
+   * [browserContext.storageState([options])](https://playwright.dev/docs/api/class-browsercontext#browser-context-storage-state)
+   * or
+   * [fetchRequest.storageState([options])](https://playwright.dev/docs/api/class-fetchrequest#fetch-request-storage-state).
+   * Either a path to the file with saved storage, or the value returned by one of
+   * [browserContext.storageState([options])](https://playwright.dev/docs/api/class-browsercontext#browser-context-storage-state)
+   * or
+   * [fetchRequest.storageState([options])](https://playwright.dev/docs/api/class-fetchrequest#fetch-request-storage-state)
+   * methods.
+   */
+  storageState?: string|{
+    cookies: Array<{
+      name: string;
+
+      value: string;
+
+      domain: string;
+
+      path: string;
+
+      /**
+       * Unix time in seconds.
+       */
+      expires: number;
+
+      httpOnly: boolean;
+
+      secure: boolean;
+
+      sameSite: "Strict"|"Lax"|"None";
+    }>;
+
+    origins: Array<{
+      origin: string;
+
+      localStorage: Array<{
+        name: string;
+
+        value: string;
+      }>;
+    }>;
   };
 
   /**

@@ -632,8 +632,14 @@ export class Registry {
     const scriptName = scripts[process.platform as 'linux' | 'darwin' | 'win32'];
     if (!scriptName)
       throw new Error(`Cannot install ${channel} on ${process.platform}`);
-    const shell = scriptName.endsWith('.ps1') ? 'powershell.exe' : 'bash';
-    const { code } = await spawnAsync(shell, [path.join(BIN_PATH, scriptName), ...scriptArgs], { cwd: BIN_PATH, stdio: 'inherit' });
+    const isPowerShell = scriptName.endsWith('.ps1');
+    const shell = isPowerShell ? 'powershell.exe' : 'bash';
+    const args = [
+      ...(isPowerShell ? ['-File'] : []),
+      path.join(BIN_PATH, scriptName),
+      ...scriptArgs
+    ];
+    const { code } = await spawnAsync(shell, args, { cwd: BIN_PATH, stdio: 'inherit' });
     if (code !== 0)
       throw new Error(`Failed to install ${channel}`);
   }
@@ -724,6 +730,34 @@ export async function installBrowsersForNpmInstall(browsers: string[]) {
   }
 
   await registry.install(executables);
+}
+
+export function findChromiumChannel(sdkLanguage: string): string | undefined {
+  // Fall back to the stable channels of popular vendors to work out of the box.
+  // Null means no installation and no channels found.
+  let channel = null;
+  for (const name of ['chromium', 'chrome', 'msedge']) {
+    try {
+      registry.findExecutable(name)!.executablePathOrDie(sdkLanguage);
+      channel = name === 'chromium' ? undefined : name;
+      break;
+    } catch (e) {
+    }
+  }
+
+  if (channel === null) {
+    const installCommand = buildPlaywrightCLICommand(sdkLanguage, `install chromium`);
+    const prettyMessage = [
+      `No chromium-based browser found on the system.`,
+      `Please run the following command to download one:`,
+      ``,
+      `    ${installCommand}`,
+      ``,
+      `<3 Playwright Team`,
+    ].join('\n');
+    throw new Error('\n' + wrapInASCIIBox(prettyMessage, 1));
+  }
+  return channel;
 }
 
 export const registry = new Registry(require('../../browsers.json'));

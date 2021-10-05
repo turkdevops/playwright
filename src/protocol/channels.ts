@@ -150,6 +150,16 @@ export type SerializedError = {
   value?: SerializedValue,
 };
 
+export type FormField = {
+  name: string,
+  value?: string,
+  file?: {
+    name: string,
+    mimeType: string,
+    buffer: Binary,
+  },
+};
+
 export type InterceptedResponse = {
   request: RequestChannel,
   status: number,
@@ -162,6 +172,7 @@ export type FetchRequestInitializer = {};
 export interface FetchRequestChannel extends Channel {
   fetch(params: FetchRequestFetchParams, metadata?: Metadata): Promise<FetchRequestFetchResult>;
   fetchResponseBody(params: FetchRequestFetchResponseBodyParams, metadata?: Metadata): Promise<FetchRequestFetchResponseBodyResult>;
+  storageState(params?: FetchRequestStorageStateParams, metadata?: Metadata): Promise<FetchRequestStorageStateResult>;
   disposeFetchResponse(params: FetchRequestDisposeFetchResponseParams, metadata?: Metadata): Promise<FetchRequestDisposeFetchResponseResult>;
   dispose(params?: FetchRequestDisposeParams, metadata?: Metadata): Promise<FetchRequestDisposeResult>;
 }
@@ -171,7 +182,9 @@ export type FetchRequestFetchParams = {
   method?: string,
   headers?: NameValue[],
   postData?: Binary,
-  formData?: any,
+  jsonData?: any,
+  formData?: NameValue[],
+  multipartData?: FormField[],
   timeout?: number,
   failOnStatusCode?: boolean,
   ignoreHTTPSErrors?: boolean,
@@ -181,7 +194,9 @@ export type FetchRequestFetchOptions = {
   method?: string,
   headers?: NameValue[],
   postData?: Binary,
-  formData?: any,
+  jsonData?: any,
+  formData?: NameValue[],
+  multipartData?: FormField[],
   timeout?: number,
   failOnStatusCode?: boolean,
   ignoreHTTPSErrors?: boolean,
@@ -198,6 +213,12 @@ export type FetchRequestFetchResponseBodyOptions = {
 };
 export type FetchRequestFetchResponseBodyResult = {
   binary?: Binary,
+};
+export type FetchRequestStorageStateParams = {};
+export type FetchRequestStorageStateOptions = {};
+export type FetchRequestStorageStateResult = {
+  cookies: NetworkCookie[],
+  origins: OriginStorage[],
 };
 export type FetchRequestDisposeFetchResponseParams = {
   fetchUid: string,
@@ -346,6 +367,10 @@ export type PlaywrightNewRequestParams = {
     password?: string,
   },
   timeout?: number,
+  storageState?: {
+    cookies: NetworkCookie[],
+    origins: OriginStorage[],
+  },
 };
 export type PlaywrightNewRequestOptions = {
   baseURL?: string,
@@ -363,6 +388,10 @@ export type PlaywrightNewRequestOptions = {
     password?: string,
   },
   timeout?: number,
+  storageState?: {
+    cookies: NetworkCookie[],
+    origins: OriginStorage[],
+  },
 };
 export type PlaywrightNewRequestResult = {
   request: FetchRequestChannel,
@@ -2741,11 +2770,17 @@ export type RequestInitializer = {
 };
 export interface RequestChannel extends Channel {
   response(params?: RequestResponseParams, metadata?: Metadata): Promise<RequestResponseResult>;
+  rawRequestHeaders(params?: RequestRawRequestHeadersParams, metadata?: Metadata): Promise<RequestRawRequestHeadersResult>;
 }
 export type RequestResponseParams = {};
 export type RequestResponseOptions = {};
 export type RequestResponseResult = {
   response?: ResponseChannel,
+};
+export type RequestRawRequestHeadersParams = {};
+export type RequestRawRequestHeadersOptions = {};
+export type RequestRawRequestHeadersResult = {
+  headers: NameValue[],
 };
 
 export interface RequestEvents {
@@ -2835,7 +2870,6 @@ export interface ResponseChannel extends Channel {
   body(params?: ResponseBodyParams, metadata?: Metadata): Promise<ResponseBodyResult>;
   securityDetails(params?: ResponseSecurityDetailsParams, metadata?: Metadata): Promise<ResponseSecurityDetailsResult>;
   serverAddr(params?: ResponseServerAddrParams, metadata?: Metadata): Promise<ResponseServerAddrResult>;
-  rawRequestHeaders(params?: ResponseRawRequestHeadersParams, metadata?: Metadata): Promise<ResponseRawRequestHeadersResult>;
   rawResponseHeaders(params?: ResponseRawResponseHeadersParams, metadata?: Metadata): Promise<ResponseRawResponseHeadersResult>;
   sizes(params?: ResponseSizesParams, metadata?: Metadata): Promise<ResponseSizesResult>;
 }
@@ -2853,11 +2887,6 @@ export type ResponseServerAddrParams = {};
 export type ResponseServerAddrOptions = {};
 export type ResponseServerAddrResult = {
   value?: RemoteAddr,
-};
-export type ResponseRawRequestHeadersParams = {};
-export type ResponseRawRequestHeadersOptions = {};
-export type ResponseRawRequestHeadersResult = {
-  headers: NameValue[],
 };
 export type ResponseRawResponseHeadersParams = {};
 export type ResponseRawResponseHeadersOptions = {};

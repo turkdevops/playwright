@@ -24,6 +24,7 @@ export type ReporterDescription =
   ['dot'] |
   ['line'] |
   ['list'] |
+  ['github'] |
   ['junit'] | ['junit', { outputFile?: string, stripANSIControlSequences?: boolean }] |
   ['json'] | ['json', { outputFile?: string }] |
   ['null'] |
@@ -461,7 +462,7 @@ interface TestConfig {
    * ```
    *
    */
-  reporter?: LiteralUnion<'list'|'dot'|'line'|'json'|'junit'|'null', string> | ReporterDescription[];
+  reporter?: LiteralUnion<'list'|'dot'|'line'|'github'|'json'|'junit'|'null', string> | ReporterDescription[];
   /**
    * Whether to report slow tests. Pass `null` to disable this feature.
    *
@@ -1101,10 +1102,15 @@ export interface TestInfo {
    */
   outputDir: string;
   /**
-   * Returns a path to a snapshot file with the given `snapshotName`. Learn more about [snapshots](https://playwright.dev/docs/test-snapshots).
-   * @param snapshotName
+   * Returns a path to a snapshot file with the given `pathSegments`. Learn more about [snapshots](https://playwright.dev/docs/test-snapshots).
+   *
+   * > Note that `pathSegments` accepts path segments to the snapshot file such as `testInfo.snapshotPath('relative', 'path',
+   * 'to', 'snapshot.png')`.
+   * > However, this path must stay within the snapshots directory for each test file (i.e. `a.spec.js-snapshots`), otherwise
+   * it will throw.
+   * @param pathSegments The name of the snapshot or the path segments to define the snapshot file path. Snapshots with the same name in the same test file are expected to be the same.
    */
-  snapshotPath: (snapshotName: string) => string;
+  snapshotPath: (...pathSegments: string[]) => string;
   /**
    * Returns a path inside the [testInfo.outputDir](https://playwright.dev/docs/api/class-testinfo#test-info-output-dir)
    * where the test can safely put a temporary file. Guarantees that tests running in parallel will not interfere with each
@@ -1120,6 +1126,11 @@ export interface TestInfo {
    * });
    * ```
    *
+   * > Note that `pathSegments` accepts path segments to the test output directory such as `testInfo.outputPath('relative',
+   * 'path', 'to', 'output')`.
+   * > However, this path must stay within the
+   * [testInfo.outputDir](https://playwright.dev/docs/api/class-testinfo#test-info-output-dir) directory for each test (i.e.
+   * `test-results/a-test-title`), otherwise it will throw.
    * @param pathSegments Path segments to append at the end of the resulting path.
    */
   outputPath: (...pathSegments: string[]) => string;
@@ -2433,7 +2444,7 @@ export type VideoMode = 'off' | 'on' | 'retain-on-failure' | 'on-first-retry' | 
  * ```
  *
  */
-export interface PlaywrightTestOptions {
+export interface PlaywrightTestOptions extends PlaywrightTest.ExtraUseOptions {
   /**
    * Whether to automatically download all the attachments. Defaults to `false` where all the downloads are canceled.
    */

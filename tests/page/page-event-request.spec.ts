@@ -41,8 +41,9 @@ it('should fire for fetches', async ({ page, server }) => {
   expect(requests.length).toBe(2);
 });
 
-it('should report requests and responses handled by service worker', async ({ page, server, isAndroid }) => {
+it('should report requests and responses handled by service worker', async ({ page, server, isAndroid, isElectron }) => {
   it.fixme(isAndroid);
+  it.fixme(isElectron);
 
   await page.goto(server.PREFIX + '/serviceworkers/fetchdummy/sw.html');
   await page.evaluate(() => window['activationPromise']);
@@ -58,7 +59,6 @@ it('should report requests and responses handled by service worker', async ({ pa
 });
 
 it('should return response body when Cross-Origin-Opener-Policy is set', async ({ page, server, browserName }) => {
-  it.fail(browserName === 'webkit', 'https://github.com/microsoft/playwright/issues/8796');
   server.setRoute('/empty.html', (req, res) => {
     res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
     res.end('Hello there!');

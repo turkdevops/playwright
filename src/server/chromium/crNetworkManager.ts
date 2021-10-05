@@ -154,6 +154,13 @@ export class CRNetworkManager {
   }
 
   _onRequestPaused(workerFrame: frames.Frame | undefined, event: Protocol.Fetch.requestPausedPayload) {
+    if (!event.responseStatusCode && !event.responseErrorReason) {
+      // Request intercepted, deliver signal to the tracker.
+      const request = this._requestIdToRequest.get(event.networkId!);
+      if (request)
+        this._responseExtraInfoTracker.requestPaused(request.request, event);
+    }
+
     if (!this._userRequestInterceptionEnabled && this._protocolRequestInterceptionEnabled) {
       this._client._sendMayFail('Fetch.continueRequest', {
         requestId: event.requestId
@@ -514,13 +521,14 @@ class RouteImpl implements network.RouteDelegate {
     this._wasFulfilled = true;
     const body = response.isBase64 ? response.body : Buffer.from(response.body).toString('base64');
 
+    const responseHeaders = splitSetCookieHeader(response.headers);
     // In certain cases, protocol will return error if the request was already canceled
     // or the page was closed. We should tolerate these errors.
     await this._client._sendMayFail('Fetch.fulfillRequest', {
       requestId: this._interceptionId!,
       responseCode: response.status,
       responsePhrase: network.STATUS_TEXTS[String(response.status)],
-      responseHeaders: response.headers,
+      responseHeaders,
       body,
     });
   }
@@ -535,6 +543,20 @@ class RouteImpl implements network.RouteDelegate {
       errorReason
     });
   }
+}
+
+function splitSetCookieHeader(headers: types.HeadersArray): types.HeadersArray {
+  const index = headers.findIndex(({ name }) => name.toLowerCase() === 'set-cookie');
+  if (index === -1)
+    return headers;
+
+  const header = headers[index];
+  const values = header.value.split('\n');
+  if (values.length === 1)
+    return headers;
+  const result = headers.slice();
+  result.splice(index, 1, ...values.map(value => ({ name: header.name, value })));
+  return result;
 }
 
 const errorReasons: { [reason: string]: Protocol.Network.ErrorReason } = {
@@ -604,6 +626,13 @@ class ResponseExtraInfoTracker {
     this._innerResponseReceived(info, event.response);
   }
 
+  requestPaused(request: network.Request, event: Protocol.Fetch.requestPausedPayload) {
+    // requestWillBeSentExtraInfo is not being called when interception
+    // is enabled. But interception is mutually exclusive with the redirects.
+    // So we can use the headers from the Fetch.requestPausedPayload immediately.
+    request.setRawRequestHeaders(headersObjectToArray(event.request.headers, '\n'));
+  }
+
   private _innerResponseReceived(info: RequestInfo, response: Protocol.Network.Response) {
     if (!response.connectionId) {
       // Starting with this response we no longer can guarantee that response and extra info correspond to the same index.
@@ -669,7 +698,7 @@ class ResponseExtraInfoTracker {
     const response = info.responses[index];
     const requestExtraInfo = info.requestWillBeSentExtraInfo[index];
     if (response && requestExtraInfo)
-      response.setRawRequestHeaders(headersObjectToArray(requestExtraInfo.headers, '\n'));
+      response.request().setRawRequestHeaders(headersObjectToArray(requestExtraInfo.headers, '\n'));
     const responseExtraInfo = info.responseReceivedExtraInfo[index];
     if (response && responseExtraInfo) {
       response.setRawResponseHeaders(headersObjectToArray(responseExtraInfo.headers, '\n'));

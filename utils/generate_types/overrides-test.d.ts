@@ -23,6 +23,7 @@ export type ReporterDescription =
   ['dot'] |
   ['line'] |
   ['list'] |
+  ['github'] |
   ['junit'] | ['junit', { outputFile?: string, stripANSIControlSequences?: boolean }] |
   ['json'] | ['json', { outputFile?: string }] |
   ['null'] |
@@ -108,7 +109,7 @@ interface TestConfig {
   preserveOutput?: PreserveOutput;
   projects?: Project[];
   quiet?: boolean;
-  reporter?: LiteralUnion<'list'|'dot'|'line'|'json'|'junit'|'null', string> | ReporterDescription[];
+  reporter?: LiteralUnion<'list'|'dot'|'line'|'github'|'json'|'junit'|'null', string> | ReporterDescription[];
   reportSlowTests?: ReportSlowTests;
   shard?: Shard;
   updateSnapshots?: UpdateSnapshots;
@@ -208,7 +209,7 @@ export interface TestInfo {
   stderr: (string | Buffer)[];
   snapshotSuffix: string;
   outputDir: string;
-  snapshotPath: (snapshotName: string) => string;
+  snapshotPath: (...pathSegments: string[]) => string;
   outputPath: (...pathSegments: string[]) => string;
 }
 
@@ -297,7 +298,7 @@ export interface PlaywrightWorkerOptions {
 
 export type VideoMode = 'off' | 'on' | 'retain-on-failure' | 'on-first-retry' | /** deprecated */ 'retry-with-video';
 
-export interface PlaywrightTestOptions {
+export interface PlaywrightTestOptions extends PlaywrightTest.ExtraUseOptions {
   acceptDownloads: boolean | undefined;
   bypassCSP: boolean | undefined;
   colorScheme: ColorScheme | undefined;
