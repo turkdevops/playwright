@@ -197,7 +197,7 @@ it('should include the origin header', async ({ page, server, isAndroid }) => {
 it('should fulfill with global fetch result', async ({ playwright, page, server, isElectron }) => {
   it.fixme(isElectron, 'error: Browser context management is not supported.');
   await page.route('**/*', async route => {
-    const request = await playwright._newRequest();
+    const request = await playwright.request.newContext();
     const response = await request.get(server.PREFIX + '/simple.json');
     route.fulfill({ response });
   });
@@ -209,7 +209,7 @@ it('should fulfill with global fetch result', async ({ playwright, page, server,
 it('should fulfill with fetch result', async ({ page, server, isElectron }) => {
   it.fixme(isElectron, 'error: Browser context management is not supported.');
   await page.route('**/*', async route => {
-    const response = await page._request.get(server.PREFIX + '/simple.json');
+    const response = await page.request.get(server.PREFIX + '/simple.json');
     route.fulfill({ response });
   });
   const response = await page.goto(server.EMPTY_PAGE);
@@ -220,7 +220,7 @@ it('should fulfill with fetch result', async ({ page, server, isElectron }) => {
 it('should fulfill with fetch result and overrides', async ({ page, server, isElectron }) => {
   it.fixme(isElectron, 'error: Browser context management is not supported.');
   await page.route('**/*', async route => {
-    const response = await page._request.get(server.PREFIX + '/simple.json');
+    const response = await page.request.get(server.PREFIX + '/simple.json');
     route.fulfill({
       response,
       status: 201,
@@ -239,7 +239,7 @@ it('should fulfill with fetch result and overrides', async ({ page, server, isEl
 it('should fetch original request and fulfill', async ({ page, server, isElectron }) => {
   it.fixme(isElectron, 'error: Browser context management is not supported.');
   await page.route('**/*', async route => {
-    const response = await page._request.get(route.request());
+    const response = await page.request.fetch(route.request());
     route.fulfill({
       response,
     });
@@ -249,7 +249,8 @@ it('should fetch original request and fulfill', async ({ page, server, isElectro
   expect(await page.title()).toEqual('Woof-Woof');
 });
 
-it('should fulfill with multiple set-cookie', async ({ page, server, browserName }) => {
+it('should fulfill with multiple set-cookie', async ({ page, server, browserName, isElectron }) => {
+  it.fixme(isElectron, 'Electron 14+ is required');
   it.fail(browserName === 'webkit', 'Response contained invalid HTTP headers');
   const cookies = ['a=b', 'c=d'];
   await page.route('**/empty.html', async route => {
@@ -273,10 +274,11 @@ it('should fulfill with fetch response that has multiple set-cookie', async ({ p
   it.fail(browserName === 'webkit', 'Response contained invalid HTTP headers');
   server.setRoute('/empty.html', (req, res) => {
     res.setHeader('Set-Cookie', ['a=b', 'c=d']);
+    res.setHeader('Content-Type', 'text/html');
     res.end();
   });
   await page.route('**/empty.html', async route => {
-    const request = await playwright._newRequest();
+    const request = await playwright.request.newContext();
     const response = await request.fetch(route.request());
     route.fulfill({ response });
   });
