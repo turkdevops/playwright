@@ -129,7 +129,7 @@ const webPackFiles = [
 for (const file of webPackFiles) {
   steps.push({
     command: 'npx',
-    args: ['webpack', '--config', filePath(file), ...(watchMode ? ['--watch', '--silent'] : [])],
+    args: ['webpack', '--config', filePath(file), ...(watchMode ? ['--watch', '--stats', 'none'] : [])],
     shell: true,
     env: {
       NODE_ENV: watchMode ? 'development' : 'production'
@@ -148,7 +148,7 @@ for (const packageDir of packages) {
       ...(watchMode ? ['-w', '--source-maps'] : []),
       '--extensions', '.ts',
       '--out-dir', path.join(packageDir, 'lib'),
-      '--ignore', 'packages/playwright-core/src/server/injected/**/*,packages/playwright-core/src/web/**/*',
+      '--ignore', 'packages/playwright-core/src/server/injected/**/*',
       path.join(packageDir, 'src')],
     shell: true,
   });

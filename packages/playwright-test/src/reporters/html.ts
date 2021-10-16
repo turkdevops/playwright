@@ -18,11 +18,12 @@ import colors from 'colors/safe';
 import fs from 'fs';
 import open from 'open';
 import path from 'path';
-import { FullConfig, Suite } from 'playwright-core/types/testReporter';
+import { FullConfig, Suite } from '../../types/testReporter';
 import { HttpServer } from 'playwright-core/src/utils/httpServer';
 import { calculateSha1, removeFolders } from 'playwright-core/src/utils/utils';
 import { toPosixPath } from './json';
 import RawReporter, { JsonReport, JsonSuite, JsonTestCase, JsonTestResult, JsonTestStep, JsonAttachment } from './raw';
+import assert from 'assert';
 
 export type Stats = {
   total: number;
@@ -101,6 +102,12 @@ export type TestStep = {
 class HtmlReporter {
   private config!: FullConfig;
   private suite!: Suite;
+  private _outputFolder: string | undefined;
+
+  constructor(options: { outputFolder?: string } = {}) {
+    // TODO: resolve relative to config.
+    this._outputFolder = options.outputFolder;
+  }
 
   onBegin(config: FullConfig, suite: Suite) {
     this.config = config;
@@ -114,28 +121,54 @@ class HtmlReporter {
       const report = rawReporter.generateProjectReport(this.config, suite);
       return report;
     });
-    const reportFolder = path.resolve(process.cwd(), process.env[`PLAYWRIGHT_HTML_REPORT`] || 'playwright-report');
+    const reportFolder = htmlReportFolder(this._outputFolder);
     await removeFolders([reportFolder]);
-    new HtmlBuilder(reports, reportFolder, this.config.rootDir);
+    const builder = new HtmlBuilder(reportFolder, this.config.rootDir);
+    const stats = builder.build(reports);
 
-    if (!process.env.CI && !process.env.PWTEST_SKIP_TEST_OUTPUT) {
-      const server = new HttpServer();
-      server.routePrefix('/', (request, response) => {
-        let relativePath = new URL('http://localhost' + request.url).pathname;
-        if (relativePath === '/')
-          relativePath = '/index.html';
-        const absolutePath = path.join(reportFolder, ...relativePath.split('/'));
-        return server.serveFile(response, absolutePath);
-      });
-      const url = await server.start(9323);
+    if (!stats.ok && !process.env.CI && !process.env.PWTEST_SKIP_TEST_OUTPUT) {
+      await showHTMLReport(reportFolder);
+    } else {
       console.log('');
-      console.log(colors.cyan(`  Serving HTML report at ${url}. Press Ctrl+C to quit.`));
-      console.log('');
-      open(url);
-      process.on('SIGINT', () => process.exit(0));
-      await new Promise(() => {});
+      console.log('All tests passed. To open last HTML report run:');
+      console.log(colors.cyan(`
+  npx playwright show-report
+`));
     }
   }
+}
+
+export function htmlReportFolder(outputFolder?: string): string {
+  if (process.env[`PLAYWRIGHT_HTML_REPORT`])
+    return path.resolve(process.cwd(), process.env[`PLAYWRIGHT_HTML_REPORT`]);
+  if (outputFolder)
+    return outputFolder;
+  return path.resolve(process.cwd(), 'playwright-report');
+}
+
+export async function showHTMLReport(reportFolder: string | undefined) {
+  const folder = reportFolder || htmlReportFolder();
+  try {
+    assert(fs.statSync(folder).isDirectory());
+  } catch (e) {
+    console.log(colors.red(`No report found at "${folder}"`));
+    process.exit(1);
+    return;
+  }
+  const server = new HttpServer();
+  server.routePrefix('/', (request, response) => {
+    let relativePath = new URL('http://localhost' + request.url).pathname;
+    if (relativePath === '/')
+      relativePath = '/index.html';
+    const absolutePath = path.join(folder, ...relativePath.split('/'));
+    return server.serveFile(response, absolutePath);
+  });
+  const url = await server.start(9323);
+  console.log('');
+  console.log(colors.cyan(`  Serving HTML report at ${url}. Press Ctrl+C to quit.`));
+  open(url);
+  process.on('SIGINT', () => process.exit(0));
+  await new Promise(() => {});
 }
 
 class HtmlBuilder {
@@ -144,19 +177,22 @@ class HtmlBuilder {
   private _rootDir: string;
   private _dataFolder: string;
 
-  constructor(rawReports: JsonReport[], outputDir: string, rootDir: string) {
+  constructor(outputDir: string, rootDir: string) {
     this._rootDir = rootDir;
     this._reportFolder = path.resolve(process.cwd(), outputDir);
     this._dataFolder = path.join(this._reportFolder, 'data');
+  }
+
+  build(rawReports: JsonReport[]): Stats {
     fs.mkdirSync(this._dataFolder, { recursive: true });
 
     // Copy app.
-    const appFolder = path.join(require.resolve('playwright-core'), '..', 'lib', 'web', 'htmlReport');
+    const appFolder = path.join(require.resolve('playwright-core'), '..', 'lib', 'webpack', 'htmlReport');
     for (const file of fs.readdirSync(appFolder))
       fs.copyFileSync(path.join(appFolder, file), path.join(this._reportFolder, file));
 
     // Copy trace viewer.
-    const traceViewerFolder = path.join(require.resolve('playwright-core'), '..', 'lib', 'web', 'traceViewer');
+    const traceViewerFolder = path.join(require.resolve('playwright-core'), '..', 'lib', 'webpack', 'traceViewer');
     const traceViewerTargetFolder = path.join(this._reportFolder, 'trace');
     fs.mkdirSync(traceViewerTargetFolder, { recursive: true });
     // TODO (#9471): remove file filter when the babel build is fixed.
@@ -187,6 +223,7 @@ class HtmlBuilder {
       });
     }
     fs.writeFileSync(path.join(this._dataFolder, 'projects.json'), JSON.stringify(projects, undefined, 2));
+    return projects.reduce((a, p) => addStats(a, p.stats), emptyStats());
   }
 
   private _createTestCase(test: JsonTestCase): TestCase {
@@ -194,7 +231,7 @@ class HtmlBuilder {
       testId: test.testId,
       title: test.title,
       location: this._relativeLocation(test.location),
-      results: test.results.map(r => this._createTestResult(test, r))
+      results: test.results.map(r => this._createTestResult(r))
     };
   }
 
@@ -239,7 +276,8 @@ class HtmlBuilder {
     };
   }
 
-  private _createTestResult(test: JsonTestCase, result: JsonTestResult): TestResult {
+  private _createTestResult(result: JsonTestResult): TestResult {
+    let lastAttachment: TestAttachment | undefined;
     return {
       duration: result.duration,
       startTime: result.startTime,
@@ -249,9 +287,12 @@ class HtmlBuilder {
       status: result.status,
       attachments: result.attachments.map(a => {
         if (a.path) {
-          const fileName = 'data/' + test.testId + path.extname(a.path);
+          let fileName = a.path;
           try {
-            fs.copyFileSync(a.path, path.join(this._reportFolder, fileName));
+            const buffer = fs.readFileSync(a.path);
+            const sha1 = calculateSha1(buffer) + path.extname(a.path);
+            fileName = 'data/' + sha1;
+            fs.writeFileSync(path.join(this._reportFolder, 'data', sha1), buffer);
           } catch (e) {
           }
           return {
@@ -261,8 +302,18 @@ class HtmlBuilder {
             body: a.body,
           };
         }
+
+        if ((a.name === 'stdout' || a.name === 'stderr') &&
+          a.contentType === 'text/plain' &&
+          lastAttachment &&
+          lastAttachment.name === a.name &&
+          lastAttachment.contentType === a.contentType) {
+          lastAttachment.body += a.body as string;
+          return null;
+        }
+        lastAttachment = a;
         return a;
-      })
+      }).filter(Boolean) as TestAttachment[]
     };
   }
 

@@ -15,7 +15,7 @@ module.exports = {
   output: {
     globalObject: 'self',
     filename: '[name].bundle.js',
-    path: path.resolve(__dirname, '../../../lib/web/traceViewer')
+    path: path.resolve(__dirname, '../../../lib/webpack/traceViewer')
   },
   module: {
     rules: [
@@ -34,10 +34,6 @@ module.exports = {
         test: /\.css$/,
         use: ['style-loader', 'css-loader']
       },
-      {
-        test: /\.ttf$/,
-        use: ['file-loader']
-      }
     ]
   },
   plugins: [
@@ -45,7 +41,14 @@ module.exports = {
       patterns: [
         {
           from: path.resolve(__dirname, '../../../../../node_modules/@zip.js/zip.js/dist/zip-no-worker-inflate.min.js'),
-          to: path.resolve(__dirname, '../../../lib/web/traceViewer/zip.min.js')
+          to: 'zip.min.js'
+        },
+      ],
+    }),
+    new CopyPlugin({
+      patterns: [
+        {
+          from: path.resolve(__dirname, 'static'),
         },
       ],
     }),

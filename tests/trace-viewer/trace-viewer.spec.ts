@@ -83,7 +83,11 @@ class TraceViewerPage {
   }
 
   async snapshotFrame(actionName: string, ordinal: number = 0, hasSubframe: boolean = false): Promise<Frame> {
-    await this.selectAction(actionName, ordinal);
+    const existing = this.page.mainFrame().childFrames()[0];
+    await Promise.all([
+      existing ? existing.waitForNavigation() as any : Promise.resolve(),
+      this.selectAction(actionName, ordinal),
+    ]);
     while (this.page.frames().length < (hasSubframe ? 3 : 2))
       await this.page.waitForEvent('frameattached');
     return this.page.mainFrame().childFrames()[0];
@@ -113,6 +117,8 @@ const test = playwrightTest.extend<{ showTraceViewer: (trace: string) => Promise
     });
   }
 });
+
+test.skip(({ trace }) => trace);
 
 let traceFile: string;
 
@@ -174,17 +180,19 @@ test('should show empty trace viewer', async ({ showTraceViewer }, testInfo) => 
 test('should open simple trace viewer', async ({ showTraceViewer }) => {
   const traceViewer = await showTraceViewer(traceFile);
   await expect(traceViewer.actionTitles).toHaveText([
+    /browserContext.newPage— [\d.ms]+/,
     /page.gotodata:text\/html,<html>Hello world<\/html>— [\d.ms]+/,
     /page.setContent— [\d.ms]+/,
     /expect.toHaveTextbutton— [\d.ms]+/,
     /page.evaluate— [\d.ms]+/,
     /page.click"Click"— [\d.ms]+/,
     /page.waitForEvent— [\d.ms]+/,
+    /page.route— [\d.ms]+/,
     /page.waitForNavigation— [\d.ms]+/,
     /page.waitForTimeout— [\d.ms]+/,
     /page.gotohttp:\/\/localhost:\d+\/frames\/frame.html— [\d.ms]+/,
+    /route.continue— [\d.ms]+/,
     /page.setViewportSize— [\d.ms]+/,
-    /page.hoverbody— [\d.ms]+/,
   ]);
 });
 
@@ -254,12 +262,6 @@ test('should have correct stack trace', async ({ showTraceViewer }) => {
   await expect(traceViewer.stackFrames).toContainText([
     /doClick\s+trace-viewer.spec.ts\s+:\d+/,
     /recordTrace\s+trace-viewer.spec.ts\s+:\d+/,
-  ], { useInnerText: true });
-
-  await traceViewer.selectAction('page.hover');
-  await traceViewer.showSourceTab();
-  await expect(traceViewer.stackFrames).toContainText([
-    /BrowserType.browserType._onWillCloseContext\s+trace-viewer.spec.ts\s+:\d+/,
   ], { useInnerText: true });
 });
 
@@ -494,4 +496,44 @@ test('should handle src=blob', async ({ page, server, runAndTrace, browserName }
   const img = await frame.waitForSelector('img');
   const size = await img.evaluate(e => (e as HTMLImageElement).naturalWidth);
   expect(size).toBe(10);
+});
+
+test('should highlight target elements', async ({ page, runAndTrace, browserName }) => {
+  test.skip(browserName === 'firefox');
+
+  const traceViewer = await runAndTrace(async () => {
+    await page.setContent(`
+      <div>hello</div>
+      <div>world</div>
+    `);
+    await page.click('text=hello');
+    await page.innerText('text=hello');
+    const handle = await page.$('text=hello');
+    await handle.click();
+    await handle.innerText();
+    await page.locator('text=hello').innerText();
+    await expect(page.locator('text=hello')).toHaveText(/hello/i);
+    await expect(page.locator('div')).toHaveText(['a', 'b'], { timeout: 1000 }).catch(() => {});
+  });
+
+  const framePageClick = await traceViewer.snapshotFrame('page.click');
+  await expect(framePageClick.locator('[__playwright_target__]')).toHaveText(['hello']);
+
+  const framePageInnerText = await traceViewer.snapshotFrame('page.innerText');
+  await expect(framePageInnerText.locator('[__playwright_target__]')).toHaveText(['hello']);
+
+  const frameHandleClick = await traceViewer.snapshotFrame('elementHandle.click');
+  await expect(frameHandleClick.locator('[__playwright_target__]')).toHaveText(['hello']);
+
+  const frameHandleInnerText = await traceViewer.snapshotFrame('elementHandle.innerText');
+  await expect(frameHandleInnerText.locator('[__playwright_target__]')).toHaveText(['hello']);
+
+  const frameLocatorInnerText = await traceViewer.snapshotFrame('locator.innerText');
+  await expect(frameLocatorInnerText.locator('[__playwright_target__]')).toHaveText(['hello']);
+
+  const frameExpect1 = await traceViewer.snapshotFrame('expect.toHaveText', 0);
+  await expect(frameExpect1.locator('[__playwright_target__]')).toHaveText(['hello']);
+
+  const frameExpect2 = await traceViewer.snapshotFrame('expect.toHaveText', 1);
+  await expect(frameExpect2.locator('[__playwright_target__]')).toHaveText(['hello', 'world']);
 });

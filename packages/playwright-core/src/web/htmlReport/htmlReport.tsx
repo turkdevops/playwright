@@ -23,7 +23,7 @@ import { TabbedPane } from '../traceViewer/ui/tabbedPane';
 import { msToString } from '../uiUtils';
 import type { ProjectTreeItem, SuiteTreeItem, TestCase, TestResult, TestStep, TestTreeItem, Location, TestFile, Stats, TestAttachment } from '@playwright/test/src/reporters/html';
 
-type Filter = 'Failing' | 'All';
+type Filter = 'failing' | 'all';
 
 type TestId = {
   fileId: string;
@@ -34,34 +34,33 @@ export const Report: React.FC = () => {
   const [report, setReport] = React.useState<ProjectTreeItem[]>([]);
   const [fetchError, setFetchError] = React.useState<string | undefined>();
   const [testId, setTestId] = React.useState<TestId | undefined>();
+  const [filter, setFilter] = React.useState<Filter>('failing');
 
   React.useEffect(() => {
     (async () => {
       try {
         const result = await fetch('data/projects.json', { cache: 'no-cache' });
         const json = (await result.json()) as ProjectTreeItem[];
+        const hasFailures = !!json.find(p => !p.stats.ok);
+        if (!hasFailures)
+          setFilter('all');
         setReport(json);
       } catch (e) {
         setFetchError(e.message);
       }
     })();
   }, []);
-  const [filter, setFilter] = React.useState<Filter>('Failing');
 
-  return <div className='hbox'>
+  return <div className='hbox columns'>
     <SplitView sidebarSize={300} orientation='horizontal' sidebarIsFirst={true}>
       <TestCaseView key={testId?.testId} testId={testId}></TestCaseView>
       <div className='suite-tree-column'>
-        <div className='tab-strip'>{
-          (['Failing', 'All'] as Filter[]).map(item => {
-            const selected = item === filter;
-            return <div key={item} className={'tab-element' + (selected ? ' selected' : '')} onClick={e => {
-              setFilter(item);
-            }}>{item}</div>;
-          })
-        }</div>
-        {!fetchError && filter === 'All' && report?.map((project, i) => <ProjectTreeItemView key={i} project={project} setTestId={setTestId} testId={testId} failingOnly={false}></ProjectTreeItemView>)}
-        {!fetchError && filter === 'Failing' && report?.map((project, i) => <ProjectTreeItemView key={i} project={project} setTestId={setTestId} testId={testId} failingOnly={true}></ProjectTreeItemView>)}
+        <div className='tab-strip'>
+          <div key='all' title='All tests' className={'tab-element' + ('all' === filter ? ' selected' : '')} onClick={() => setFilter('all')}>All</div>
+          <div key='failing' title='Failing tests' className={'tab-element' + ('failing' === filter ? ' selected' : '')} onClick={() => setFilter('failing')}>Failing</div>
+        </div>
+        {!fetchError && filter === 'all' && report?.map((project, i) => <ProjectTreeItemView key={i} project={project} setTestId={setTestId} testId={testId} failingOnly={false}></ProjectTreeItemView>)}
+        {!fetchError && filter === 'failing' && report?.filter(p => !p.stats.ok).map((project, i) => <ProjectTreeItemView key={i} project={project} setTestId={setTestId} testId={testId} failingOnly={true}></ProjectTreeItemView>)}
       </div>
     </SplitView>
   </div>;
@@ -92,7 +91,7 @@ const SuiteTreeItemView: React.FC<{
   depth: number,
 }> = ({ suite, testId, setTestId, failingOnly, depth }) => {
   return <TreeItem title={<div className='hbox'>
-    <div className='tree-text' title={suite.title}>{suite.title}</div>
+    <div className='tree-text' title={suite.title}>{suite.title || '<untitled>'}</div>
     <div style={{ flex: 'auto' }}></div>
     <StatsView stats={suite.stats}></StatsView>
   </div>
@@ -214,7 +213,7 @@ const TestResultView: React.FC<{
       <AttachmentLink attachment={a}></AttachmentLink>
     </div>)}
 
-    {!!otherAttachments && <div key='attachments-title' className='test-overview-title'>Attachments</div>}
+    {!!otherAttachments.length && <div key='attachments-title' className='test-overview-title'>Attachments</div>}
     {otherAttachments.map((a, i) => <AttachmentLink key={`attachment-link-${i}`} attachment={a}></AttachmentLink>)}
   </div>;
 };
@@ -256,7 +255,7 @@ export const AttachmentLink: React.FunctionComponent<{
     {attachment.path && <a href={href || attachment.path} target='_blank'>{attachment.name}</a>}
     {attachment.body && <span>{attachment.name}</span>}
   </div>} loadChildren={attachment.body ? () => {
-    return [<div className='attachment-body'>${attachment.body}</div>];
+    return [<div className='attachment-body'>{attachment.body}</div>];
   } : undefined} depth={0}></TreeItem>;
 };
 

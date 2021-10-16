@@ -24,7 +24,7 @@ import { Dispatcher, TestGroup } from './dispatcher';
 import { createFileMatcher, createTitleMatcher, FilePatternFilter, monotonicTime } from './util';
 import { TestCase, Suite } from './test';
 import { Loader } from './loader';
-import { Reporter } from 'playwright-core/types/testReporter';
+import { Reporter } from '../types/testReporter';
 import { Multiplexer } from './reporters/multiplexer';
 import DotReporter from './reporters/dot';
 import GitHubReporter from './reporters/github';
@@ -33,6 +33,7 @@ import ListReporter from './reporters/list';
 import JSONReporter from './reporters/json';
 import JUnitReporter from './reporters/junit';
 import EmptyReporter from './reporters/empty';
+import HtmlReporter from './reporters/html';
 import { ProjectImpl } from './project';
 import { Minimatch } from 'minimatch';
 import { FullConfig } from './types';
@@ -73,8 +74,16 @@ export class Runner {
       json: JSONReporter,
       junit: JUnitReporter,
       null: EmptyReporter,
+      html: HtmlReporter,
     };
     const reporters: Reporter[] = [];
+    const reporterConfig = this._loader.fullConfig().reporter;
+    if (reporterConfig.length === 1 && reporterConfig[0][0] === 'html') {
+      // For html reporter, add a line/dot report for convenience.
+      // Important to put html last because it stalls onEnd.
+      reporterConfig.unshift([process.stdout.isTTY && !process.env.CI ? 'line' : 'dot', { omitFailures: true }]);
+    }
+
     for (const r of this._loader.fullConfig().reporter) {
       const [name, arg] = r;
       if (name in defaultReporters) {
@@ -541,5 +550,5 @@ class ListModeReporter implements Reporter {
   }
 }
 
-export const builtInReporters = ['list', 'line', 'dot', 'json', 'junit', 'null', 'github'] as const;
+export const builtInReporters = ['list', 'line', 'dot', 'json', 'junit', 'null', 'github', 'html'] as const;
 export type BuiltInReporter = typeof builtInReporters[number];
