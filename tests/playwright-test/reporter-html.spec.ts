@@ -15,22 +15,16 @@
  */
 
 import fs from 'fs';
-import path from 'path';
 import { test as baseTest, expect } from './playwright-test-fixtures';
-import { HttpServer } from 'playwright-core/src/utils/httpServer';
+import { HttpServer } from 'playwright-core/lib/utils/httpServer';
+import { startHtmlReportServer } from '../../packages/playwright-test/lib/reporters/html';
 
 const test = baseTest.extend<{ showReport: () => Promise<void> }>({
   showReport: async ({ page }, use, testInfo) => {
-    const server = new HttpServer();
+    let server: HttpServer;
     await use(async () => {
       const reportFolder = testInfo.outputPath('playwright-report');
-      server.routePrefix('/', (request, response) => {
-        let relativePath = new URL('http://localhost' + request.url).pathname;
-        if (relativePath === '/')
-          relativePath = '/index.html';
-        const absolutePath = path.join(reportFolder, ...relativePath.split('/'));
-        return server.serveFile(response, absolutePath);
-      });
+      server = startHtmlReportServer(reportFolder);
       const location = await server.start();
       await page.goto(location);
     });
@@ -59,90 +53,87 @@ test('should generate report', async ({ runInlineTest }, testInfo) => {
       });
     `,
   }, { reporter: 'dot,html', retries: 1 });
-  const report = testInfo.outputPath('playwright-report', 'data', 'projects.json');
+  const report = testInfo.outputPath('playwright-report', 'data', 'report.json');
   const reportObject = JSON.parse(fs.readFileSync(report, 'utf-8'));
-  delete reportObject[0].suites[0].duration;
-  delete reportObject[0].suites[0].location.line;
-  delete reportObject[0].suites[0].location.column;
+  delete reportObject.testIdToFileId;
+  delete reportObject.files[0].fileId;
+  delete reportObject.files[0].stats.duration;
+  delete reportObject.stats.duration;
 
   const fileNames = new Set<string>();
-  for (const test of reportObject[0].suites[0].tests) {
+  for (const test of reportObject.files[0].tests) {
     fileNames.add(testInfo.outputPath('playwright-report', 'data', test.fileId + '.json'));
     delete test.testId;
     delete test.fileId;
     delete test.location.line;
     delete test.location.column;
     delete test.duration;
+    delete test.path;
   }
-  expect(reportObject[0]).toEqual({
-    name: 'project-name',
-    suites: [
+  expect(reportObject).toEqual({
+    files: [
       {
-        title: 'a.test.js',
-        location: {
-          file: 'a.test.js'
-        },
+        fileName: 'a.test.js',
+        tests: [
+          {
+            title: 'fails',
+            projectName: 'project-name',
+            location: {
+              file: 'a.test.js'
+            },
+            outcome: 'unexpected',
+            ok: false
+          },
+          {
+            title: 'flaky',
+            projectName: 'project-name',
+            location: {
+              file: 'a.test.js'
+            },
+            outcome: 'flaky',
+            ok: true
+          },
+          {
+            title: 'passes',
+            projectName: 'project-name',
+            location: {
+              file: 'a.test.js'
+            },
+            outcome: 'expected',
+            ok: true
+          },
+          {
+            title: 'skip',
+            projectName: 'project-name',
+            location: {
+              file: 'a.test.js'
+            },
+            outcome: 'skipped',
+            ok: false
+          }
+        ],
         stats: {
           total: 4,
           expected: 1,
           unexpected: 1,
           flaky: 1,
           skipped: 1,
-          ok: false
-        },
-        suites: [],
-        tests: [
-          {
-            location: {
-              file: 'a.test.js'
-            },
-            title: 'passes',
-            outcome: 'expected',
-            ok: true
-          },
-          {
-            location: {
-              file: 'a.test.js'
-            },
-            title: 'fails',
-            outcome: 'unexpected',
-            ok: false
-          },
-          {
-            location: {
-              file: 'a.test.js'
-            },
-            title: 'skip',
-            outcome: 'skipped',
-            ok: true
-          },
-          {
-            location: {
-              file: 'a.test.js'
-            },
-            title: 'flaky',
-            outcome: 'flaky',
-            ok: true
-          }
-        ]
+          ok: false,
+        }
       }
     ],
+    projectNames: [
+      'project-name'
+    ],
     stats: {
-      total: 4,
       expected: 1,
-      unexpected: 1,
       flaky: 1,
+      ok: false,
       skipped: 1,
-      ok: false
+      total: 4,
+      unexpected: 1,
     }
   });
-
-  expect(fileNames.size).toBe(1);
-  const fileName = fileNames.values().next().value;
-  const testCase = JSON.parse(fs.readFileSync(fileName, 'utf-8'));
-  expect(testCase.tests).toHaveLength(4);
-  expect(testCase.tests.map(t => t.title)).toEqual(['passes', 'fails', 'skip', 'flaky']);
-  expect(testCase).toBeTruthy();
 });
 
 test('should not throw when attachment is missing', async ({ runInlineTest }) => {
@@ -185,7 +176,6 @@ test('should include image diff', async ({ runInlineTest, page, showReport }) =>
   expect(result.failed).toBe(1);
 
   await showReport();
-  await page.click('text=a.test.js');
   await page.click('text=fails');
   const imageDiff = page.locator('.test-image-mismatch');
   const image = imageDiff.locator('img');
@@ -221,7 +211,6 @@ test('should include screenshot on failure', async ({ runInlineTest, page, showR
   expect(result.failed).toBe(1);
 
   await showReport();
-  await page.click('text=a.test.js');
   await page.click('text=fails');
   await expect(page.locator('text=Screenshots')).toBeVisible();
   await expect(page.locator('img')).toBeVisible();
@@ -245,10 +234,59 @@ test('should include stdio', async ({ runInlineTest, page, showReport }) => {
   expect(result.failed).toBe(1);
 
   await showReport();
-  await page.click('text=a.test.js');
   await page.click('text=fails');
   await page.locator('text=stdout').click();
   await expect(page.locator('.attachment-body')).toHaveText('First line\nSecond line');
   await page.locator('text=stderr').click();
   await expect(page.locator('.attachment-body').nth(1)).toHaveText('Third line');
+});
+
+test('should highlight error', async ({ runInlineTest, page, showReport }) => {
+  const result = await runInlineTest({
+    'a.test.js': `
+      const { test } = pwt;
+      test('fails', async ({ page }) => {
+        await expect(true).toBeFalsy();
+      });
+    `,
+  }, { reporter: 'dot,html' });
+  expect(result.exitCode).toBe(1);
+  expect(result.failed).toBe(1);
+
+  await showReport();
+  await page.click('text=fails');
+  await expect(page.locator('.error-message span:has-text("received")').nth(1)).toHaveCSS('color', 'rgb(204, 0, 0)');
+});
+
+test('should show trace source', async ({ runInlineTest, page, showReport }) => {
+  const result = await runInlineTest({
+    'playwright.config.js': `
+      module.exports = { use: { trace: 'on' } };
+    `,
+    'a.test.js': `
+      const { test } = pwt;
+      test('passes', async ({ page }) => {
+        await page.evaluate('2 + 2');
+      });
+    `,
+  }, { reporter: 'dot,html' });
+  expect(result.exitCode).toBe(0);
+  expect(result.passed).toBe(1);
+
+  await showReport();
+  await page.click('text=passes');
+  await page.click('img');
+  await page.click('.action-title >> text=page.evaluate');
+  await page.click('text=Source');
+
+  await expect(page.locator('.source-line')).toContainText([
+    /const.*pwt;/,
+    /page\.evaluate/
+  ]);
+  await expect(page.locator('.source-line-running')).toContainText('page.evaluate');
+
+  await expect(page.locator('.stack-trace-frame')).toContainText([
+    /a.test.js:[\d]+/,
+  ]);
+  await expect(page.locator('.stack-trace-frame.selected')).toContainText('a.test.js');
 });
