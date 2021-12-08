@@ -64,9 +64,13 @@ function archive_compiled_chromium() {
     CHROMIUM_FOLDER_NAME="chrome-mac"
     IFS=$'\n' CHROMIUM_FILES_TO_ARCHIVE=($(node "${SCRIPT_PATH}/compute_files_to_archive.js" "${CR_CHECKOUT_PATH}/src/infra/archive_config/mac-archive-rel.json"))
     unset IFS
-  elif [[ $1 == "--compile-linux"* ]]; then
+  elif [[ $1 == "--compile-linux" ]]; then
     CHROMIUM_FOLDER_NAME="chrome-linux"
     IFS=$'\n' CHROMIUM_FILES_TO_ARCHIVE=($(node "${SCRIPT_PATH}/compute_files_to_archive.js" "${CR_CHECKOUT_PATH}/src/infra/archive_config/linux-archive-rel.json"))
+    unset IFS
+  elif [[ $1 == "--compile-linux-arm64" ]]; then
+    CHROMIUM_FOLDER_NAME="chrome-linux"
+    IFS=$'\n' CHROMIUM_FILES_TO_ARCHIVE=($(node "${SCRIPT_PATH}/compute_files_to_archive.js" "${CR_CHECKOUT_PATH}/src/infra/archive_config/linux-archive-rel.json" --linux-arm64))
     unset IFS
   elif [[ $1 == "--compile-win64" ]]; then
     CHROMIUM_FOLDER_NAME="chrome-win"
@@ -96,6 +100,8 @@ function archive_compiled_chromium() {
 
   if [[ $1 == "--compile-win"* ]]; then
     $COPY_COMMAND "${CR_CHECKOUT_PATH}/src/out/Default/"*.manifest "output/${CHROMIUM_FOLDER_NAME}/"
+    mkdir -p "output/${CHROMIUM_FOLDER_NAME}/locales"
+    $COPY_COMMAND "${CR_CHECKOUT_PATH}/src/out/Default/locales/"*.pak "output/${CHROMIUM_FOLDER_NAME}/locales/"
   fi
 
   cd output

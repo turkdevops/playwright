@@ -34,7 +34,7 @@ import { Tracing } from './trace/recorder/tracing';
 import { HarRecorder } from './supplements/har/harRecorder';
 import { RecorderSupplement } from './supplements/recorderSupplement';
 import * as consoleApiSource from '../generated/consoleApiSource';
-import { BrowserContextFetchRequest } from './fetch';
+import { BrowserContextAPIRequestContext } from './fetch';
 
 export abstract class BrowserContext extends SdkObject {
   static Events = {
@@ -64,7 +64,7 @@ export abstract class BrowserContext extends SdkObject {
   private _origins = new Set<string>();
   readonly _harRecorder: HarRecorder | undefined;
   readonly tracing: Tracing;
-  readonly fetchRequest: BrowserContextFetchRequest;
+  readonly fetchRequest: BrowserContextAPIRequestContext;
 
   constructor(browser: Browser, options: types.BrowserContextOptions, browserContextId: string | undefined) {
     super(browser, 'browser-context');
@@ -78,11 +78,12 @@ export abstract class BrowserContext extends SdkObject {
     // Create instrumentation per context.
     this.instrumentation = createInstrumentation();
 
+    this.fetchRequest = new BrowserContextAPIRequestContext(this);
+
     if (this._options.recordHar)
       this._harRecorder = new HarRecorder(this, { ...this._options.recordHar, path: path.join(this._browser.options.artifactsDir, `${createGuid()}.har`) });
 
     this.tracing = new Tracing(this);
-    this.fetchRequest = new BrowserContextFetchRequest(this);
   }
 
   isPersistentContext(): boolean {
@@ -401,6 +402,8 @@ export function validateBrowserContextOptions(options: types.BrowserContextOptio
     throw new Error(`"deviceScaleFactor" option is not supported with null "viewport"`);
   if (options.noDefaultViewport && options.isMobile !== undefined)
     throw new Error(`"isMobile" option is not supported with null "viewport"`);
+  if (options.acceptDownloads === undefined)
+    options.acceptDownloads = true;
   if (!options.viewport && !options.noDefaultViewport)
     options.viewport = { width: 1280, height: 720 };
   if (options.recordVideo) {
@@ -428,8 +431,6 @@ export function validateBrowserContextOptions(options: types.BrowserContextOptio
   if (debugMode() === 'inspector')
     options.bypassCSP = true;
   verifyGeolocation(options.geolocation);
-  if (!options._debugName)
-    options._debugName = createGuid();
 }
 
 export function verifyGeolocation(geolocation?: types.Geolocation) {

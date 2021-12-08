@@ -224,21 +224,10 @@ FormField:
       type: object?
       properties:
         name: string
-        mimeType: string
+        mimeType: string?
         buffer: binary
 
-InterceptedResponse:
-  type: object
-  properties:
-    request: Request
-    status: number
-    statusText: string
-    headers:
-      type: array
-      items: NameValue
-
-
-FetchRequest:
+APIRequestContext:
   type: interface
 
   commands:
@@ -265,14 +254,21 @@ FetchRequest:
         failOnStatusCode: boolean?
         ignoreHTTPSErrors: boolean?
       returns:
-        response: FetchResponse?
-        error: string?
+        response: APIResponse
 
     fetchResponseBody:
       parameters:
         fetchUid: string
       returns:
         binary?: binary
+
+    fetchLog:
+      parameters:
+        fetchUid: string
+      returns:
+        log:
+          type: array
+          items: string
 
     storageState:
       returns:
@@ -283,14 +279,14 @@ FetchRequest:
           type: array
           items: OriginStorage
 
-    disposeFetchResponse:
+    disposeAPIResponse:
       parameters:
         fetchUid: string
 
     dispose:
 
 
-FetchResponse:
+APIResponse:
   type: object
   properties:
     fetchUid: string
@@ -403,7 +399,6 @@ ContextOptions:
       - none
     acceptDownloads: boolean?
     baseURL: string?
-    _debugName: string?
     recordVideo:
       type: object?
       properties:
@@ -532,7 +527,7 @@ Playwright:
               items: OriginStorage
 
       returns:
-        request: FetchRequest
+        request: APIRequestContext
 
   events:
     socksRequested:
@@ -696,7 +691,7 @@ BrowserContext:
 
   initializer:
     isChromium: boolean
-    fetchRequest: FetchRequest
+    APIRequestContext: APIRequestContext
 
   commands:
 
@@ -819,6 +814,8 @@ BrowserContext:
         screenshots: boolean?
 
     tracingStartChunk:
+      parameters:
+        title: string?
 
     tracingStopChunk:
       parameters:
@@ -1378,6 +1375,7 @@ Frame:
         trial: boolean?
         sourcePosition: Point?
         targetPosition: Point?
+        strict: boolean?
       tracing:
         snapshot: true
         pausesBeforeInput: true
@@ -2326,9 +2324,6 @@ Route:
           type: array?
           items: NameValue
         postData: binary?
-        interceptResponse: boolean?
-      returns:
-        response: InterceptedResponse?
 
     fulfill:
       parameters:
@@ -2339,12 +2334,7 @@ Route:
           items: NameValue
         body: string?
         isBase64: boolean?
-        useInterceptedResponseBody: boolean?
         fetchResponseUid: string?
-
-    responseBody:
-      returns:
-        binary: binary
 
 
 ResourceTiming:
@@ -2892,7 +2882,6 @@ AndroidDevice:
           - active
           - none
         acceptDownloads: boolean?
-        _debugName: string?
         recordVideo:
           type: object?
           properties:

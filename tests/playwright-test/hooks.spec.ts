@@ -494,12 +494,13 @@ test('beforeAll and afterAll timeouts at the same time should be reported', asyn
   expect(result.output).toContain('Timeout of 1000ms exceeded in beforeAll hook.');
 });
 
-test('afterEach should get the test status right away', async ({ runInlineTest }) => {
+test('afterEach should get the test status and duration right away', async ({ runInlineTest }) => {
   const result = await runInlineTest({
     'a.test.js': `
       const { test } = pwt;
       test.afterEach(({}, testInfo) => {
-        console.log('\\n%%' + testInfo.title + ': ' + testInfo.status);
+        const duration = testInfo.duration ? 'XXms' : 'none';
+        console.log('\\n%%' + testInfo.title + ': ' + testInfo.status + '; ' + duration);
       });
       test('failing', () => {
         throw new Error('Oh my!');
@@ -513,8 +514,8 @@ test('afterEach should get the test status right away', async ({ runInlineTest }
   expect(result.exitCode).toBe(1);
   expect(result.failed).toBe(2);
   expect(result.output.split('\n').filter(line => line.startsWith('%%'))).toEqual([
-    '%%failing: failed',
-    '%%timing out: timedOut',
+    '%%failing: failed; XXms',
+    '%%timing out: timedOut; XXms',
   ]);
 });
 
@@ -542,4 +543,27 @@ test('uncaught error in beforeEach should not be masked by another error', async
   expect(result.failed).toBe(1);
   expect(stripAscii(result.output)).toContain('Expected: 2');
   expect(stripAscii(result.output)).toContain('Received: 1');
+});
+
+test('should report error from fixture teardown when beforeAll times out', async ({ runInlineTest }) => {
+  const result = await runInlineTest({
+    'a.test.js': `
+      const test = pwt.test.extend({
+        foo: async ({}, use) => {
+          let cb;
+          await use(new Promise((f, r) => cb = r));
+          cb(new Error('Oh my!'));
+        },
+      });
+      test.beforeAll(async ({ foo }, testInfo) => {
+        await foo;
+      });
+      test('passing', () => {
+      });
+    `,
+  }, { timeout: 1000 });
+  expect(result.exitCode).toBe(1);
+  expect(result.failed).toBe(1);
+  expect(stripAscii(result.output)).toContain('Timeout of 1000ms exceeded in beforeAll hook.');
+  expect(stripAscii(result.output)).toContain('Error: Oh my!');
 });

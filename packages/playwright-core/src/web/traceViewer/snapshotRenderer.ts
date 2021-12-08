@@ -59,8 +59,12 @@ export class SnapshotRenderer {
           // Element node.
           const builder: string[] = [];
           builder.push('<', n[0]);
-          for (const [attr, value] of Object.entries(n[1] || {}))
-            builder.push(' ', attr, '="', escapeAttribute(value as string), '"');
+          // Never set relative URLs as <iframe src> - they start fetching frames immediately.
+          const isFrame = n[0] === 'IFRAME' || n[0] === 'FRAME';
+          for (const [attr, value] of Object.entries(n[1] || {})) {
+            const attrToSet = isFrame && attr.toLowerCase() === 'src' ? '__playwright_src__' : attr;
+            builder.push(' ', attrToSet, '="', escapeAttribute(value as string), '"');
+          }
           builder.push('>');
           for (let i = 2; i < n.length; i++)
             builder.push(visit(n[i], snapshotIndex));
@@ -80,9 +84,10 @@ export class SnapshotRenderer {
     if (!html)
       return { html: '', pageId: snapshot.pageId, frameId: snapshot.frameId, index: this._index };
 
-    if (snapshot.doctype)
-      html = `<!DOCTYPE ${snapshot.doctype}>` + html;
-    html += `
+    // Hide the document in order to prevent flickering. We will unhide once script has processed shadow.
+    const hideAllStyle = '<style>*,*::before,*::after { visibility: hidden }</style>';
+    const prefix = snapshot.doctype ? `<!DOCTYPE ${snapshot.doctype}>` + hideAllStyle : hideAllStyle;
+    html = prefix + html + `
       <style>*[__playwright_target__="${this.snapshotName}"] { background-color: #6fa8dc7f; }</style>
       <script>${snapshotScript()}</script>
     `;
@@ -180,14 +185,19 @@ function snapshotScript() {
         scrollLefts.push(e);
 
       for (const iframe of root.querySelectorAll('iframe')) {
-        const src = iframe.getAttribute('src');
+        const src = iframe.getAttribute('__playwright_src__');
         if (!src) {
           iframe.setAttribute('src', 'data:text/html,<body style="background: #ddd"></body>');
         } else {
           // Append query parameters to inherit ?name= or ?time= values from parent.
-          const url = new URL('/trace' + src + window.location.search, window.location.href);
+          const url = new URL(window.location.href);
           url.searchParams.delete('pointX');
           url.searchParams.delete('pointY');
+          // We can be loading iframe from within iframe, reset base to be absolute.
+          const index = url.pathname.lastIndexOf('/snapshot/');
+          if (index !== -1)
+            url.pathname = url.pathname.substring(0, index + 1);
+          url.pathname += src.substring(1);
           iframe.setAttribute('src', url.toString());
         }
       }
@@ -240,6 +250,7 @@ function snapshotScript() {
         pointElement.style.top = pointY + 'px';
         document.documentElement.appendChild(pointElement);
       }
+      document.styleSheets[0].disabled = true;
     };
     window.addEventListener('load', onLoad);
   }

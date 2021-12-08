@@ -19,7 +19,7 @@ import fs from 'fs';
 import open from 'open';
 import path from 'path';
 import { Transform, TransformCallback } from 'stream';
-import { FullConfig, Suite } from '../../types/testReporter';
+import { FullConfig, Suite, Reporter } from '../../types/testReporter';
 import { HttpServer } from 'playwright-core/lib/utils/httpServer';
 import { calculateSha1, removeFolders } from 'playwright-core/lib/utils/utils';
 import RawReporter, { JsonReport, JsonSuite, JsonTestCase, JsonTestResult, JsonTestStep, JsonAttachment } from './raw';
@@ -68,6 +68,7 @@ export type TestCaseSummary = {
   path: string[];
   projectName: string;
   location: Location;
+  annotations: { type: string, description?: string }[];
   outcome: 'skipped' | 'expected' | 'unexpected' | 'flaky';
   duration: number;
   ok: boolean;
@@ -104,7 +105,9 @@ type TestEntry = {
   testCaseSummary: TestCaseSummary
 };
 
-class HtmlReporter {
+const kMissingContentType = 'x-playwright/missing';
+
+class HtmlReporter implements Reporter {
   private config!: FullConfig;
   private suite!: Suite;
   private _outputFolder: string | undefined;
@@ -114,6 +117,10 @@ class HtmlReporter {
     // TODO: resolve relative to config.
     this._outputFolder = options.outputFolder;
     this._open = options.open || 'on-failure';
+  }
+
+  printsToStdio() {
+    return false;
   }
 
   onBegin(config: FullConfig, suite: Suite) {
@@ -140,10 +147,11 @@ class HtmlReporter {
     if (shouldOpen) {
       await showHTMLReport(reportFolder, singleTestId);
     } else {
+      const outputFolderPath = htmlReportFolder(this._outputFolder) === defaultReportFolder() ? '' : ' ' + path.relative(process.cwd(), htmlReportFolder(this._outputFolder));
       console.log('');
       console.log('To open last HTML report run:');
       console.log(colors.cyan(`
-  npx playwright show-report
+  npx playwright show-report${outputFolderPath}
 `));
     }
   }
@@ -154,6 +162,10 @@ export function htmlReportFolder(outputFolder?: string): string {
     return path.resolve(process.cwd(), process.env[`PLAYWRIGHT_HTML_REPORT`]);
   if (outputFolder)
     return outputFolder;
+  return defaultReportFolder();
+}
+
+function defaultReportFolder(): string {
   return path.resolve(process.cwd(), 'playwright-report');
 }
 
@@ -173,7 +185,6 @@ export async function showHTMLReport(reportFolder: string | undefined, testId?: 
   if (testId)
     url += `#?testId=${testId}`;
   open(url);
-  process.on('SIGINT', () => process.exit(0));
   await new Promise(() => {});
 }
 
@@ -184,7 +195,7 @@ export function startHtmlReportServer(folder: string): HttpServer {
     if (relativePath.startsWith('/trace/file')) {
       const url = new URL('http://localhost' + request.url!);
       try {
-        return server.serveFile(response, url.searchParams.get('path')!);
+        return server.serveFile(request, response, url.searchParams.get('path')!);
       } catch (e) {
         return false;
       }
@@ -192,7 +203,7 @@ export function startHtmlReportServer(folder: string): HttpServer {
     if (relativePath === '/')
       relativePath = '/index.html';
     const absolutePath = path.join(folder, ...relativePath.split('/'));
-    return server.serveFile(response, absolutePath);
+    return server.serveFile(request, response, absolutePath);
   });
   return server;
 }
@@ -338,6 +349,7 @@ class HtmlBuilder {
         projectName,
         location,
         duration,
+        annotations: test.annotations,
         outcome: test.outcome,
         path,
         results: test.results.map(r => this._createTestResult(r)),
@@ -349,6 +361,7 @@ class HtmlBuilder {
         projectName,
         location,
         duration,
+        annotations: test.annotations,
         outcome: test.outcome,
         path,
         ok: test.outcome === 'expected' || test.outcome === 'flaky',
@@ -377,6 +390,11 @@ class HtmlBuilder {
             fs.mkdirSync(path.join(this._reportFolder, 'data'), { recursive: true });
             fs.writeFileSync(path.join(this._reportFolder, 'data', sha1), buffer);
           } catch (e) {
+            return {
+              name: `Missing attachment "${a.name}"`,
+              contentType: kMissingContentType,
+              body: `Attachment file ${fileName} is missing`,
+            };
           }
           return {
             name: a.name,

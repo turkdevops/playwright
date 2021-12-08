@@ -87,7 +87,7 @@ export class TestChildProcess {
       return;
     try {
       if (process.platform === 'win32')
-        execSync(`taskkill /pid ${this.process.pid} /T /F /FI "MEMUSAGE gt 0"`);
+        execSync(`taskkill /pid ${this.process.pid} /T /F /FI "MEMUSAGE gt 0"`, { stdio: 'ignore' });
       else
         process.kill(-this.process.pid, 'SIGKILL');
     } catch (e) {
@@ -123,7 +123,7 @@ export const commonFixtures: Fixtures<CommonFixtures, {}> = {
       return process;
     });
     await Promise.all(processes.map(child => child.close()));
-    if (testInfo.status !== 'passed' && !process.env.PWTEST_DEBUG) {
+    if (testInfo.status !== 'passed' && testInfo.status !== 'skipped' && !process.env.PWTEST_DEBUG) {
       for (const process of processes) {
         console.log('====== ' + process.params.command.join(' '));
         console.log(process.output);

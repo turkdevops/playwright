@@ -14,39 +14,26 @@
  * limitations under the License.
  */
 
-import type { TestType, FullProject, Fixtures, FixturesWithLocation } from './types';
+import type { FullProject, Fixtures, FixturesWithLocation } from './types';
 import { Suite, TestCase } from './test';
-import { FixturePool } from './fixtures';
-import { DeclaredFixtures, TestTypeImpl } from './testType';
+import { FixturePool, isFixtureOption } from './fixtures';
+import { TestTypeImpl } from './testType';
 
 export class ProjectImpl {
   config: FullProject;
   private index: number;
-  private defines = new Map<TestType<any, any>, Fixtures>();
   private testTypePools = new Map<TestTypeImpl, FixturePool>();
   private testPools = new Map<TestCase, FixturePool>();
 
   constructor(project: FullProject, index: number) {
     this.config = project;
     this.index = index;
-    this.defines = new Map();
-    for (const { test, fixtures } of Array.isArray(project.define) ? project.define : [project.define])
-      this.defines.set(test, fixtures);
   }
 
   private buildTestTypePool(testType: TestTypeImpl): FixturePool {
     if (!this.testTypePools.has(testType)) {
-      const fixtures = this.resolveFixtures(testType);
-      const overrides: Fixtures = this.config.use;
-      const overridesWithLocation = {
-        fixtures: overrides,
-        location: {
-          file: `<configuration file>`,
-          line: 1,
-          column: 1,
-        }
-      };
-      const pool = new FixturePool([...fixtures, overridesWithLocation]);
+      const fixtures = this.resolveFixtures(testType, this.config.use);
+      const pool = new FixturePool(fixtures);
       this.testTypePools.set(testType, pool);
     }
     return this.testTypePools.get(testType)!;
@@ -80,12 +67,6 @@ export class ProjectImpl {
   }
 
   private _cloneEntries(from: Suite, to: Suite, repeatEachIndex: number, filter: (test: TestCase) => boolean): boolean {
-    for (const hook of from._allHooks) {
-      const clone = hook._clone();
-      clone._pool = this.buildPool(hook);
-      clone._projectIndex = this.index;
-      to._addAllHook(clone);
-    }
     for (const entry of from._entries) {
       if (entry instanceof Suite) {
         const suite = entry._clone();
@@ -95,22 +76,31 @@ export class ProjectImpl {
           to.suites.pop();
         }
       } else {
-        const pool = this.buildPool(entry);
         const test = entry._clone();
         test.retries = this.config.retries;
-        test._workerHash = `run${this.index}-${pool.digest}-repeat${repeatEachIndex}`;
         test._id = `${entry._ordinalInFile}@${entry._requireFile}#run${this.index}-repeat${repeatEachIndex}`;
-        test._pool = pool;
         test._repeatEachIndex = repeatEachIndex;
         test._projectIndex = this.index;
         to._addTest(test);
         if (!filter(test)) {
           to._entries.pop();
-          to.suites.pop();
+          to.tests.pop();
+        } else {
+          const pool = this.buildPool(entry);
+          test._workerHash = `run${this.index}-${pool.digest}-repeat${repeatEachIndex}`;
+          test._pool = pool;
         }
       }
     }
-    return to._entries.length > 0;
+    if (!to._entries.length)
+      return false;
+    for (const hook of from._allHooks) {
+      const clone = hook._clone();
+      clone._pool = this.buildPool(hook);
+      clone._projectIndex = this.index;
+      to._addAllHook(clone);
+    }
+    return true;
   }
 
   cloneFileSuite(suite: Suite, repeatEachIndex: number, filter: (test: TestCase) => boolean): Suite | undefined {
@@ -118,13 +108,18 @@ export class ProjectImpl {
     return this._cloneEntries(suite, result, repeatEachIndex, filter) ? result : undefined;
   }
 
-  private resolveFixtures(testType: TestTypeImpl): FixturesWithLocation[] {
+  private resolveFixtures(testType: TestTypeImpl, configUse: Fixtures): FixturesWithLocation[] {
     return testType.fixtures.map(f => {
-      if (f instanceof DeclaredFixtures) {
-        const fixtures = this.defines.get(f.testType.test) || {};
-        return { fixtures, location: f.location };
+      const configKeys = new Set(Object.keys(configUse || {}));
+      const resolved = { ...f.fixtures };
+      for (const [key, value] of Object.entries(resolved)) {
+        if (!isFixtureOption(value) || !configKeys.has(key))
+          continue;
+        // Apply override from config file.
+        const override = (configUse as any)[key];
+        (resolved as any)[key] = [override, value[1]];
       }
-      return f;
+      return { fixtures: resolved, location: f.location };
     });
   }
 }

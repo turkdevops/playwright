@@ -17,18 +17,20 @@
 import fs from 'fs';
 import path from 'path';
 import rimraf from 'rimraf';
+import * as mime from 'mime';
 import util from 'util';
 import colors from 'colors/safe';
 import { EventEmitter } from 'events';
-import { monotonicTime, serializeError, sanitizeForFilePath, getContainedPath, addSuffixToFilePath } from './util';
+import { monotonicTime, serializeError, sanitizeForFilePath, getContainedPath, addSuffixToFilePath, prependToTestError } from './util';
 import { TestBeginPayload, TestEndPayload, RunPayload, TestEntry, DonePayload, WorkerInitParams, StepBeginPayload, StepEndPayload } from './ipc';
 import { setCurrentTestInfo } from './globals';
 import { Loader } from './loader';
 import { Modifier, Suite, TestCase } from './test';
 import { Annotations, TestError, TestInfo, TestInfoImpl, TestStepInternal, WorkerInfo } from './types';
 import { ProjectImpl } from './project';
-import { FixturePool, FixtureRunner } from './fixtures';
+import { FixtureRunner } from './fixtures';
 import { DeadlineRunner, raceAgainstDeadline } from 'playwright-core/lib/utils/async';
+import { calculateFileSha1 } from 'playwright-core/lib/utils/utils';
 
 const removeFolderAsync = util.promisify(rimraf);
 
@@ -148,15 +150,14 @@ export class WorkerRunner extends EventEmitter {
       this._entries = new Map(runPayload.entries.map(e => [ e.testId, e ]));
       await this._loadIfNeeded();
       const fileSuite = await this._loader.loadTestFile(runPayload.file);
-      let anyPool: FixturePool | undefined;
       const suite = this._project.cloneFileSuite(fileSuite, this._params.repeatEachIndex, test => {
         if (!this._entries.has(test._id))
           return false;
-        anyPool = test._pool;
         return true;
       });
-      if (suite && anyPool) {
-        this._fixtureRunner.setPool(anyPool);
+      if (suite) {
+        const firstPool = suite.allTests()[0]._pool!;
+        this._fixtureRunner.setPool(firstPool);
         await this._runSuite(suite, []);
       }
       if (this._failedTest)
@@ -241,7 +242,11 @@ export class WorkerRunner extends EventEmitter {
       return path.join(this._project.config.outputDir, testOutputDir);
     })();
 
-    let testFinishedCallback = () => {};
+    const snapshotDir = (() => {
+      const relativeTestFilePath = path.relative(this._project.config.testDir, test._requireFile);
+      return path.join(this._project.config.snapshotDir, relativeTestFilePath + '-snapshots');
+    })();
+
     let lastStepId = 0;
     const testInfo: TestInfoImpl = {
       workerIndex: this._params.workerIndex,
@@ -249,6 +254,7 @@ export class WorkerRunner extends EventEmitter {
       project: this._project.config,
       config: this._loader.fullConfig(),
       title: test.title,
+      titlePath: test.titlePath(),
       file: test.location.file,
       line: test.location.line,
       column: test.location.column,
@@ -258,6 +264,40 @@ export class WorkerRunner extends EventEmitter {
       expectedStatus: test.expectedStatus,
       annotations: [],
       attachments: [],
+      attach: async (...args) => {
+        const [ pathOrBody, nameOrFileOptions, inlineOptions ] = args as [string | Buffer, string | { contentType?: string, name?: string} | undefined, { contentType?: string } | undefined];
+        let attachment: { name: string, contentType: string, body?: Buffer, path?: string } | undefined;
+        if (typeof nameOrFileOptions === 'string') { // inline attachment
+          const body = pathOrBody;
+          const name = nameOrFileOptions;
+
+          attachment = {
+            name,
+            contentType: inlineOptions?.contentType ?? (mime.getType(name) || (typeof body === 'string' ? 'text/plain' : 'application/octet-stream')),
+            body: typeof body === 'string' ? Buffer.from(body) : body,
+          };
+        } else { // path based attachment
+          const options = nameOrFileOptions;
+          const thePath = pathOrBody as string;
+          const name = options?.name ?? path.basename(thePath);
+          attachment = {
+            name,
+            path: thePath,
+            contentType: options?.contentType ?? (mime.getType(name) || 'application/octet-stream')
+          };
+        }
+
+        const tmpAttachment = { ...attachment };
+        if (attachment.path) {
+          const hash = await calculateFileSha1(attachment.path);
+          const dest = testInfo.outputPath('attachments', hash + path.extname(attachment.path));
+          await fs.promises.mkdir(path.dirname(dest), { recursive: true });
+          await fs.promises.copyFile(attachment.path, dest);
+          tmpAttachment.path = dest;
+        }
+
+        testInfo.attachments.push(tmpAttachment);
+      },
       duration: 0,
       status: 'passed',
       stdout: [],
@@ -265,13 +305,13 @@ export class WorkerRunner extends EventEmitter {
       timeout: this._project.config.timeout,
       snapshotSuffix: '',
       outputDir: baseOutputDir,
+      snapshotDir,
       outputPath: (...pathSegments: string[]): string => {
         fs.mkdirSync(baseOutputDir, { recursive: true });
         const joinedPath = path.join(...pathSegments);
         const outputPath = getContainedPath(baseOutputDir, joinedPath);
         if (outputPath) return outputPath;
         throw new Error(`The outputPath is not allowed outside of the parent directory. Please fix the defined path.\n\n\toutputPath: ${joinedPath}`);
-
       },
       snapshotPath: (...pathSegments: string[]): string => {
         let suffix = '';
@@ -279,11 +319,8 @@ export class WorkerRunner extends EventEmitter {
           suffix += '-' + this._projectNamePathSegment;
         if (testInfo.snapshotSuffix)
           suffix += '-' + testInfo.snapshotSuffix;
-
-        const baseSnapshotPath = test._requireFile + '-snapshots';
         const subPath = addSuffixToFilePath(path.join(...pathSegments), suffix);
-        const snapshotPath =  getContainedPath(baseSnapshotPath, subPath);
-
+        const snapshotPath =  getContainedPath(snapshotDir, subPath);
         if (snapshotPath) return snapshotPath;
         throw new Error(`The snapshotPath is not allowed outside of the parent directory. Please fix the defined path.\n\n\tsnapshotPath: ${subPath}`);
       },
@@ -296,7 +333,6 @@ export class WorkerRunner extends EventEmitter {
         if (deadlineRunner)
           deadlineRunner.updateDeadline(deadline());
       },
-      _testFinished: new Promise(f => testFinishedCallback = f),
       _addStep: data => {
         const stepId = `${data.category}@${data.title}@${++lastStepId}`;
         let callbackHandled = false;
@@ -386,7 +422,7 @@ export class WorkerRunner extends EventEmitter {
     // Do not overwrite test failure upon hook timeout.
     if (result.timedOut && testInfo.status === 'passed')
       testInfo.status = 'timedOut';
-    testFinishedCallback();
+    testInfo.duration = monotonicTime() - startTime;
 
     if (!result.timedOut) {
       this._currentDeadlineRunner = deadlineRunner = new DeadlineRunner(this._runAfterHooks(test, testInfo), deadline());
@@ -412,11 +448,12 @@ export class WorkerRunner extends EventEmitter {
       if (test._type === 'test') {
         // Delay reporting testEnd result until after teardownScopes is done.
         this._failedTest = testData;
-      } else if (!this._fatalError) {
-        if (testInfo.status === 'timedOut')
-          this._fatalError = { message: colors.red(`Timeout of ${testInfo.timeout}ms exceeded in ${test._type} hook.`) };
-        else
+      } else {
+        if (!this._fatalError)
           this._fatalError = testInfo.error;
+        // Keep any error we have, and add "timeout" message.
+        if (testInfo.status === 'timedOut')
+          this._fatalError = prependToTestError(this._fatalError, colors.red(`Timeout of ${testInfo.timeout}ms exceeded in ${test._type} hook.\n`));
       }
       this.stop();
     } else if (reportEvents) {

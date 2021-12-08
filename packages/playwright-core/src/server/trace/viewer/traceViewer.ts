@@ -15,6 +15,7 @@
  */
 
 import path from 'path';
+import fs from 'fs';
 import * as consoleApiSource from '../../../generated/consoleApiSource';
 import { HttpServer } from '../../../utils/httpServer';
 import { findChromiumChannel } from '../../../utils/registry';
@@ -26,19 +27,23 @@ import { createPlaywright } from '../../playwright';
 import { ProgressController } from '../../progress';
 
 export async function showTraceViewer(traceUrl: string, browserName: string, headless = false, port?: number): Promise<BrowserContext | undefined> {
+  if (traceUrl && !traceUrl.startsWith('http://') && !traceUrl.startsWith('https://') && !fs.existsSync(traceUrl)) {
+    console.error(`Trace file ${traceUrl} does not exist!`);
+    process.exit(1);
+  }
   const server = new HttpServer();
   server.routePrefix('/trace', (request, response) => {
     const url = new URL('http://localhost' + request.url!);
     const relativePath = url.pathname.slice('/trace'.length);
     if (relativePath.startsWith('/file')) {
       try {
-        return server.serveFile(response, url.searchParams.get('path')!);
+        return server.serveFile(request, response, url.searchParams.get('path')!);
       } catch (e) {
         return false;
       }
     }
     const absolutePath = path.join(__dirname, '..', '..', '..', 'webpack', 'traceViewer', ...relativePath.split('/'));
-    return server.serveFile(response, absolutePath);
+    return server.serveFile(request, response, absolutePath);
   });
 
   const urlPrefix = await server.start(port);

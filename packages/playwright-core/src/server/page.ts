@@ -34,6 +34,7 @@ import { debugLogger } from '../utils/debugLogger';
 import { SelectorInfo, Selectors } from './selectors';
 import { CallMetadata, SdkObject } from './instrumentation';
 import { Artifact } from './artifact';
+import { ParsedSelector } from './common/selectorParser';
 
 export interface PageDelegate {
   readonly rawMouse: input.RawMouse;
@@ -57,10 +58,8 @@ export interface PageDelegate {
   setFileChooserIntercepted(enabled: boolean): Promise<void>;
   bringToFront(): Promise<void>;
 
-  canScreenshotOutsideViewport(): boolean;
-  resetViewport(): Promise<void>; // Only called if canScreenshotOutsideViewport() returns false.
   setBackgroundColor(color?: { r: number; g: number; b: number; a: number; }): Promise<void>;
-  takeScreenshot(progress: Progress, format: string, documentRect: types.Rect | undefined, viewportRect: types.Rect | undefined, quality: number | undefined): Promise<Buffer>;
+  takeScreenshot(progress: Progress, format: string, documentRect: types.Rect | undefined, viewportRect: types.Rect | undefined, quality: number | undefined, fitsViewport: boolean | undefined): Promise<Buffer>;
 
   isElementHandle(remoteObject: any): boolean;
   adoptElementHandle<T extends Node>(handle: dom.ElementHandle<T>, to: dom.FrameExecutionContext): Promise<dom.ElementHandle<T>>;
@@ -464,13 +463,13 @@ export class Page extends SdkObject {
     const worker = this._workers.get(workerId);
     if (!worker)
       return;
-    worker.emit(Worker.Events.Close, worker);
+    worker.didClose();
     this._workers.delete(workerId);
   }
 
   _clearWorkers() {
     for (const [workerId, worker] of this._workers) {
-      worker.emit(Worker.Events.Close, worker);
+      worker.didClose();
       this._workers.delete(workerId);
     }
   }
@@ -515,7 +514,7 @@ export class Page extends SdkObject {
     this.emit(Page.Events.PageError, error);
   }
 
-  parseSelector(selector: string, options?: types.StrictOptions): SelectorInfo {
+  parseSelector(selector: string | ParsedSelector, options?: types.StrictOptions): SelectorInfo {
     const strict = typeof options?.strict === 'boolean' ? options.strict : !!this.context()._options.strictSelectors;
     return this.selectors.parseSelector(selector, strict);
   }
@@ -545,6 +544,12 @@ export class Worker extends SdkObject {
 
   url(): string {
     return this._url;
+  }
+
+  didClose() {
+    if (this._existingExecutionContext)
+      this._existingExecutionContext.contextDestroyed(new Error('Worker was closed'));
+    this.emit(Worker.Events.Close, this);
   }
 
   async evaluateExpression(expression: string, isFunction: boolean | undefined, arg: any): Promise<any> {

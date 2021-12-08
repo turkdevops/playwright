@@ -76,7 +76,7 @@ export class RecorderSupplement implements InstrumentationListener {
   }
 
   async install() {
-    const recorderApp = await RecorderApp.open(this._context._browser.options.sdkLanguage);
+    const recorderApp = await RecorderApp.open(this._context._browser.options.sdkLanguage, !!this._context._browser.options.headful);
     this._recorderApp = recorderApp;
     recorderApp.once('close', () => {
       this._debugger.resume(false);
@@ -440,6 +440,7 @@ class ContextRecorder extends EventEmitter {
         objectId: frame.guid,
         pageId: frame._page.guid,
         frameId: frame.guid,
+        wallTime: Date.now(),
         startTime: monotonicTime(),
         endTime: 0,
         type: 'Frame',

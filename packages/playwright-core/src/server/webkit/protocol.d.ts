@@ -5749,21 +5749,6 @@ the top of the viewport and Y increases as it proceeds towards the bottom of the
       base64Encoded: boolean;
     }
     /**
-     * Returns content served for the given request. Will wait for the request to finish loading.
-     */
-    export type getInterceptedResponseBodyParameters = {
-      /**
-       * Identifier of the intercepted network response's request.
-       */
-      requestId: RequestId;
-    }
-    export type getInterceptedResponseBodyReturnValue = {
-      /**
-       * Base64 encoded response body.
-       */
-      body: string;
-    }
-    /**
      * Toggles whether the resource cache may be used when loading resources in the inspected page. If <code>true</code>, the resource cache will not be used when loading resources.
      */
     export type setResourceCachingDisabledParameters = {
@@ -5956,21 +5941,6 @@ the top of the viewport and Y increases as it proceeds towards the bottom of the
       headers?: Headers;
     }
     export type interceptWithResponseReturnValue = {
-    }
-    /**
-     * Fail response with given error type.
-     */
-    export type interceptResponseWithErrorParameters = {
-      /**
-       * Identifier for the intercepted Network response to fail.
-       */
-      requestId: RequestId;
-      /**
-       * Deliver error reason for the request failure.
-       */
-      errorType: ResourceErrorType;
-    }
-    export type interceptResponseWithErrorReturnValue = {
     }
     /**
      * Provide response for an intercepted request. Request completely bypasses the network in this case and is immediately fulfilled with the provided data.
@@ -6839,6 +6809,18 @@ the top of the viewport and Y increases as it proceeds towards the bottom of the
       text: string;
     }
     export type insertTextReturnValue = {
+    }
+    /**
+     * Set the current IME composition.
+     */
+    export type setCompositionParameters = {
+      text: string;
+      selectionStart: number;
+      selectionLength: number;
+      replacementStart?: number;
+      replacementLength?: number;
+    }
+    export type setCompositionReturnValue = {
     }
     /**
      * Serializes and returns all of the accessibility nodes of the page.
@@ -9024,7 +9006,6 @@ the top of the viewport and Y increases as it proceeds towards the bottom of the
     "Network.disable": Network.disableParameters;
     "Network.setExtraHTTPHeaders": Network.setExtraHTTPHeadersParameters;
     "Network.getResponseBody": Network.getResponseBodyParameters;
-    "Network.getInterceptedResponseBody": Network.getInterceptedResponseBodyParameters;
     "Network.setResourceCachingDisabled": Network.setResourceCachingDisabledParameters;
     "Network.loadResource": Network.loadResourceParameters;
     "Network.getSerializedCertificate": Network.getSerializedCertificateParameters;
@@ -9035,7 +9016,6 @@ the top of the viewport and Y increases as it proceeds towards the bottom of the
     "Network.interceptContinue": Network.interceptContinueParameters;
     "Network.interceptWithRequest": Network.interceptWithRequestParameters;
     "Network.interceptWithResponse": Network.interceptWithResponseParameters;
-    "Network.interceptResponseWithError": Network.interceptResponseWithErrorParameters;
     "Network.interceptRequestWithResponse": Network.interceptRequestWithResponseParameters;
     "Network.interceptRequestWithError": Network.interceptRequestWithErrorParameters;
     "Network.setEmulateOfflineState": Network.setEmulateOfflineStateParameters;
@@ -9068,6 +9048,7 @@ the top of the viewport and Y increases as it proceeds towards the bottom of the
     "Page.archive": Page.archiveParameters;
     "Page.setScreenSizeOverride": Page.setScreenSizeOverrideParameters;
     "Page.insertText": Page.insertTextParameters;
+    "Page.setComposition": Page.setCompositionParameters;
     "Page.accessibilitySnapshot": Page.accessibilitySnapshotParameters;
     "Page.setInterceptFileChooserDialog": Page.setInterceptFileChooserDialogParameters;
     "Page.setDefaultBackgroundColorOverride": Page.setDefaultBackgroundColorOverrideParameters;
@@ -9325,7 +9306,6 @@ the top of the viewport and Y increases as it proceeds towards the bottom of the
     "Network.disable": Network.disableReturnValue;
     "Network.setExtraHTTPHeaders": Network.setExtraHTTPHeadersReturnValue;
     "Network.getResponseBody": Network.getResponseBodyReturnValue;
-    "Network.getInterceptedResponseBody": Network.getInterceptedResponseBodyReturnValue;
     "Network.setResourceCachingDisabled": Network.setResourceCachingDisabledReturnValue;
     "Network.loadResource": Network.loadResourceReturnValue;
     "Network.getSerializedCertificate": Network.getSerializedCertificateReturnValue;
@@ -9336,7 +9316,6 @@ the top of the viewport and Y increases as it proceeds towards the bottom of the
     "Network.interceptContinue": Network.interceptContinueReturnValue;
     "Network.interceptWithRequest": Network.interceptWithRequestReturnValue;
     "Network.interceptWithResponse": Network.interceptWithResponseReturnValue;
-    "Network.interceptResponseWithError": Network.interceptResponseWithErrorReturnValue;
     "Network.interceptRequestWithResponse": Network.interceptRequestWithResponseReturnValue;
     "Network.interceptRequestWithError": Network.interceptRequestWithErrorReturnValue;
     "Network.setEmulateOfflineState": Network.setEmulateOfflineStateReturnValue;
@@ -9369,6 +9348,7 @@ the top of the viewport and Y increases as it proceeds towards the bottom of the
     "Page.archive": Page.archiveReturnValue;
     "Page.setScreenSizeOverride": Page.setScreenSizeOverrideReturnValue;
     "Page.insertText": Page.insertTextReturnValue;
+    "Page.setComposition": Page.setCompositionReturnValue;
     "Page.accessibilitySnapshot": Page.accessibilitySnapshotReturnValue;
     "Page.setInterceptFileChooserDialog": Page.setInterceptFileChooserDialogReturnValue;
     "Page.setDefaultBackgroundColorOverride": Page.setDefaultBackgroundColorOverrideReturnValue;

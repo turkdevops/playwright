@@ -199,27 +199,27 @@ test('should work with trace: on', async ({ runInlineTest }, testInfo) => {
   expect(result.failed).toBe(5);
   expect(listFiles(testInfo.outputPath('test-results'))).toEqual([
     'artifacts-failing',
-    '  trace-failing.zip',
+    '  trace.zip',
     'artifacts-own-context-failing',
-    '  trace-own-context-failing.zip',
+    '  trace.zip',
     'artifacts-own-context-passing',
-    '  trace-own-context-passing.zip',
+    '  trace.zip',
     'artifacts-passing',
-    '  trace-passing.zip',
+    '  trace.zip',
     'artifacts-persistent-failing',
-    '  trace-persistent-failing.zip',
+    '  trace.zip',
     'artifacts-persistent-passing',
-    '  trace-persistent-passing.zip',
+    '  trace.zip',
     'artifacts-shared-shared-failing',
-    '  trace-shared-failing.zip',
+    '  trace.zip',
     'artifacts-shared-shared-passing',
-    '  trace-shared-passing.zip',
+    '  trace.zip',
     'artifacts-two-contexts',
-    '  trace-two-contexts-1.zip',
-    '  trace-two-contexts.zip',
+    '  trace-1.zip',
+    '  trace.zip',
     'artifacts-two-contexts-failing',
-    '  trace-two-contexts-failing-1.zip',
-    '  trace-two-contexts-failing.zip',
+    '  trace-1.zip',
+    '  trace.zip',
     'report.json',
   ]);
 });
@@ -237,16 +237,16 @@ test('should work with trace: retain-on-failure', async ({ runInlineTest }, test
   expect(result.failed).toBe(5);
   expect(listFiles(testInfo.outputPath('test-results'))).toEqual([
     'artifacts-failing',
-    '  trace-failing.zip',
+    '  trace.zip',
     'artifacts-own-context-failing',
-    '  trace-own-context-failing.zip',
+    '  trace.zip',
     'artifacts-persistent-failing',
-    '  trace-persistent-failing.zip',
+    '  trace.zip',
     'artifacts-shared-shared-failing',
-    '  trace-shared-failing.zip',
+    '  trace.zip',
     'artifacts-two-contexts-failing',
-    '  trace-two-contexts-failing-1.zip',
-    '  trace-two-contexts-failing.zip',
+    '  trace-1.zip',
+    '  trace.zip',
     'report.json',
   ]);
 });
@@ -264,92 +264,16 @@ test('should work with trace: on-first-retry', async ({ runInlineTest }, testInf
   expect(result.failed).toBe(5);
   expect(listFiles(testInfo.outputPath('test-results'))).toEqual([
     'artifacts-failing-retry1',
-    '  trace-failing.zip',
+    '  trace.zip',
     'artifacts-own-context-failing-retry1',
-    '  trace-own-context-failing.zip',
+    '  trace.zip',
     'artifacts-persistent-failing-retry1',
-    '  trace-persistent-failing.zip',
+    '  trace.zip',
     'artifacts-shared-shared-failing-retry1',
-    '  trace-shared-failing.zip',
+    '  trace.zip',
     'artifacts-two-contexts-failing-retry1',
-    '  trace-two-contexts-failing-1.zip',
-    '  trace-two-contexts-failing.zip',
+    '  trace-1.zip',
+    '  trace.zip',
     'report.json',
   ]);
-});
-
-test('should stop tracing with trace: on-first-retry, when not retrying', async ({ runInlineTest }, testInfo) => {
-  const result = await runInlineTest({
-    'playwright.config.ts': `
-      module.exports = { use: { trace: 'on-first-retry' } };
-    `,
-    'a.spec.ts': `
-      const { test } = pwt;
-
-      test.describe('shared', () => {
-        let page;
-        test.beforeAll(async ({ browser }) => {
-          page = await browser.newPage();
-        });
-
-        test.afterAll(async () => {
-          await page.close();
-        });
-
-        test('flaky', async ({}, testInfo) => {
-          expect(testInfo.retry).toBe(1);
-        });
-
-        test('no tracing', async ({}, testInfo) => {
-          const e = await page.context().tracing.stop({ path: 'ignored' }).catch(e => e);
-          expect(e.message).toContain('Must start tracing before stopping');
-        });
-      });
-    `,
-  }, { workers: 1, retries: 1 });
-
-  expect(result.exitCode).toBe(0);
-  expect(result.passed).toBe(1);
-  expect(result.flaky).toBe(1);
-  expect(listFiles(testInfo.outputPath('test-results'))).toEqual([
-    'a-shared-flaky-retry1',
-    '  trace-flaky.zip',
-    'report.json',
-  ]);
-});
-
-test('should not throw with trace: on-first-retry and two retries in the same worker', async ({ runInlineTest }, testInfo) => {
-  const files = {};
-  for (let i = 0; i < 6; i++) {
-    files[`a${i}.spec.ts`] = `
-      import { test } from './helper';
-      test('flaky', async ({ myContext }, testInfo) => {
-        await new Promise(f => setTimeout(f, 200 + Math.round(Math.random() * 1000)));
-        expect(testInfo.retry).toBe(1);
-      });
-      test('passing', async ({ myContext }, testInfo) => {
-        await new Promise(f => setTimeout(f, 200 + Math.round(Math.random() * 1000)));
-      });
-    `;
-  }
-  const result = await runInlineTest({
-    ...files,
-    'playwright.config.ts': `
-      module.exports = { use: { trace: 'on-first-retry' } };
-    `,
-    'helper.ts': `
-      const { test: base } = pwt;
-      export const test = base.extend({
-        myContext: [async ({ browser }, use) => {
-          const c = await browser.newContext();
-          await use(c);
-          await c.close();
-        }, { scope: 'worker' }]
-      })
-    `,
-  }, { workers: 3, retries: 1 });
-
-  expect(result.exitCode).toBe(0);
-  expect(result.passed).toBe(6);
-  expect(result.flaky).toBe(6);
 });

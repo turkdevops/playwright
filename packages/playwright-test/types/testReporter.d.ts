@@ -106,6 +106,9 @@ export interface Suite {
  * or repeated multiple times, it will have multiple `TestCase` objects in corresponding projects' suites.
  */
 export interface TestCase {
+  /**
+   * Suite this test case belongs to.
+   */
   parent: Suite;
   /**
    * Test title as passed to the [test.(call)(title, testFunction)](https://playwright.dev/docs/api/class-test#test-call)
@@ -123,7 +126,7 @@ export interface TestCase {
   /**
    * Expected test status.
    * - Tests marked as [test.skip(title, testFunction)](https://playwright.dev/docs/api/class-test#test-skip-1) or
-   *   [test.fixme([condition, description])](https://playwright.dev/docs/api/class-test#test-fixme) are expected to be
+   *   [test.fixme(title, testFunction)](https://playwright.dev/docs/api/class-test#test-fixme-1) are expected to be
    *   `'skipped'`.
    * - Tests marked as [test.fail([condition, description])](https://playwright.dev/docs/api/class-test#test-fail) are
    *   expected to be `'failed'`.
@@ -356,6 +359,11 @@ export interface FullResult {
  * went wrong outside of the test execution.
  */
 export interface Reporter {
+  /**
+   * Whether this reporter uses stdio for reporting. When it does not, Playwright Test could add some output to enhance user
+   * experience.
+   */
+  printsToStdio?(): boolean;
   /**
    * Called once before running tests. All tests have been already discovered and put into a hierarchy of [Suite]s.
    * @param config Resolved configuration.

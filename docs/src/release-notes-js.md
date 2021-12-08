@@ -5,6 +5,64 @@ title: "Release notes"
 
 <!-- TOC -->
 
+## Version 1.17
+
+### Frame Locators
+
+Playwright 1.17 introduces [frame locators](./api/class-framelocator) - a locator to the iframe on the page. Frame locators capture the logic sufficient to retrieve the `iframe` and then locate elements in that iframe. Frame locators are strict by default, will wait for `iframe` to appear and can be used in Web-First assertions.
+
+![Graphics](https://user-images.githubusercontent.com/746130/142082759-2170db38-370d-43ec-8d41-5f9941f57d83.png)
+
+Frame locators can be created with either [`method: Page.frameLocator`] or [`method: Locator.frameLocator`] method.
+
+```js
+const locator = page.frameLocator('#my-iframe').locator('text=Submit');
+await locator.click();
+```
+
+Read more at [our documentation](./api/class-framelocator).
+
+### Trace Viewer Update
+
+Playwright Trace Viewer is now **available online** at https://trace.playwright.dev! Just drag-and-drop your `trace.zip` file to inspect its contents.
+
+> **NOTE**: trace files are not uploaded anywhere; [trace.playwright.dev](https://trace.playwright.dev) is a [progressive web application](https://web.dev/progressive-web-apps/) that processes traces locally.
+
+- Playwright Test traces now include sources by default (these could be turned off with tracing option)
+- Trace Viewer now shows test name
+- New trace metadata tab with browser details
+- Snapshots now have URL bar
+
+![image](https://user-images.githubusercontent.com/746130/141877831-29e37cd1-e574-4bd9-aab5-b13a463bb4ae.png)
+
+### HTML Report Update
+
+- HTML report now supports dynamic filtering
+- Report is now a **single static HTML file** that could be sent by e-mail or as a slack attachment.
+
+![image](https://user-images.githubusercontent.com/746130/141877402-e486643d-72c7-4db3-8844-ed2072c5d676.png)
+
+### Ubuntu ARM64 support + more
+
+- Playwright now supports **Ubuntu 20.04 ARM64**. You can now run Playwright tests inside Docker on Apple M1 and on Raspberry Pi.
+- You can now use Playwright to install stable version of Edge on Linux:
+    ```bash
+    npx playwright install msedge
+    ```
+
+### New APIs
+
+- Tracing now supports a [`'title'`](./api/class-tracing#tracing-start-option-title) option
+- Page navigations support a new [`'commit'`](./api/class-page#page-goto) waiting option
+- HTML reporter got [new configuration options](./test-reporters#html-reporter)
+- [`testConfig.snapshotDir` option](./api/class-testconfig#test-config-snapshot-dir)
+- [`testInfo.parallelIndex`](./api/class-testinfo#test-info-parallel-index)
+- [`testInfo.titlePath`](./api/class-testinfo#test-info-title-path)
+- [`testOptions.trace`](./api/class-testoptions#test-options-trace) has new options
+- [`expect.toMatchSnapshot`](./test-assertions#expectvaluetomatchsnapshotname-options) supports subdirectories
+- [`reporter.printsToStdio()`](./api/class-reporter#reporter-prints-to-stdio)
+
+
 ## Version 1.16
 
 ### 🎭 Playwright Test
@@ -46,7 +104,7 @@ Read more about it in our [API testing guide](./test-api-testing).
 
 #### Response Interception
 
-It is now possible to do response interception by combining [API Testing](./test-api-testing) with [equest interception](./network#modify-requests).
+It is now possible to do response interception by combining [API Testing](./test-api-testing) with [request interception](./network#modify-requests).
 
 For example, we can blur all the images on the page:
 
@@ -73,14 +131,14 @@ Read more about [response interception](./network#modify-responses).
 
 #### New HTML reporter
 
-Try it out new HML reporter with either `--reporter=html` or a `reporter` entry
+Try it out new HTML reporter with either `--reporter=html` or a `reporter` entry
 in `playwright.config.ts` file:
 
 ```bash
 $ npx playwright test --reporter=html
 ```
 
-The HTLM reporter has all the information about tests and their failures, including surfacing
+The HTML reporter has all the information about tests and their failures, including surfacing
 trace and image artifacts.
 
 ![html reporter](https://user-images.githubusercontent.com/746130/138324311-94e68b39-b51a-4776-a446-f60037a77f32.png)
@@ -351,7 +409,7 @@ Learn more in the [documentation](./test-advanced#launching-a-development-web-se
 
 #### Playwright Test
 
-- **⚡️ Introducing [Reporter API](https://github.com/microsoft/playwright/blob/master/types/testReporter.d.ts)** which is already used to create an [Allure Playwright reporter](https://github.com/allure-framework/allure-js/pull/297).
+- **⚡️ Introducing [Reporter API](https://github.com/microsoft/playwright/blob/65a9037461ffc15d70cdc2055832a0c5512b227c/packages/playwright-test/types/testReporter.d.ts)** which is already used to create an [Allure Playwright reporter](https://github.com/allure-framework/allure-js/pull/297).
 - **⛺️ New [`baseURL` fixture](./test-configuration#basic-options)** to support relative paths in tests.
 
 

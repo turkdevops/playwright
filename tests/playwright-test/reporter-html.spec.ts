@@ -67,7 +67,7 @@ test('should generate report', async ({ runInlineTest, showReport, page }) => {
   await expect(page.locator('.test-summary.outcome-skipped >> text=skipped')).toBeVisible();
 });
 
-test('should not throw when attachment is missing', async ({ runInlineTest }) => {
+test('should not throw when attachment is missing', async ({ runInlineTest, page, showReport }, testInfo) => {
   const result = await runInlineTest({
     'playwright.config.ts': `
       module.exports = { preserveOutput: 'failures-only' };
@@ -83,6 +83,12 @@ test('should not throw when attachment is missing', async ({ runInlineTest }) =>
   }, { reporter: 'dot,html' });
   expect(result.exitCode).toBe(0);
   expect(result.passed).toBe(1);
+
+  await showReport();
+  await page.click('text=passes');
+  await page.locator('text=Missing attachment "screenshot"').click();
+  const screenshotFile = testInfo.outputPath('test-results' , 'a-passes', 'screenshot.png');
+  await expect(page.locator('.attachment-body')).toHaveText(`Attachment file ${screenshotFile} is missing`);
 });
 
 test('should include image diff', async ({ runInlineTest, page, showReport }) => {
@@ -220,4 +226,71 @@ test('should show trace source', async ({ runInlineTest, page, showReport }) => 
     /a.test.js:[\d]+/,
   ]);
   await expect(page.locator('.stack-trace-frame.selected')).toContainText('a.test.js');
+});
+
+test('should show trace title', async ({ runInlineTest, page, showReport }) => {
+  const result = await runInlineTest({
+    'playwright.config.js': `
+      module.exports = { use: { trace: 'on' } };
+    `,
+    'a.test.js': `
+      const { test } = pwt;
+      test('passes', async ({ page }) => {
+        await page.evaluate('2 + 2');
+      });
+    `,
+  }, { reporter: 'dot,html' });
+  expect(result.exitCode).toBe(0);
+  expect(result.passed).toBe(1);
+
+  await showReport();
+  await page.click('text=passes');
+  await page.click('img');
+  await expect(page.locator('.workbench .title')).toHaveText('a.test.js:6 › passes');
+});
+
+test('should show timed out steps', async ({ runInlineTest, page, showReport }) => {
+  const result = await runInlineTest({
+    'playwright.config.js': `
+      module.exports = { timeout: 500 };
+    `,
+    'a.test.js': `
+      const { test } = pwt;
+      test('fails', async ({ page }) => {
+        await test.step('outer step', async () => {
+          await test.step('inner step', async () => {
+            await new Promise(() => {});
+          });
+        });
+      });
+    `,
+  }, { reporter: 'dot,html' });
+  expect(result.exitCode).toBe(1);
+  expect(result.passed).toBe(0);
+
+  await showReport();
+  await page.click('text=fails');
+  await page.click('text=outer step');
+  await expect(page.locator('.tree-item:has-text("outer step") svg.color-text-danger')).toHaveCount(2);
+  await expect(page.locator('.tree-item:has-text("inner step") svg.color-text-danger')).toHaveCount(2);
+});
+
+test('should render annotations', async ({ runInlineTest, page, showReport }) => {
+  const result = await runInlineTest({
+    'playwright.config.js': `
+      module.exports = { timeout: 1500 };
+    `,
+    'a.test.js': `
+      const { test } = pwt;
+      test('skipped test', async ({ page }) => {
+        test.skip(true, 'I am not interested in this test');
+      });
+    `,
+  }, { reporter: 'dot,html' });
+  expect(result.exitCode).toBe(0);
+  expect(result.skipped).toBe(1);
+
+  await showReport();
+  await page.click('text=skipped test');
+  await expect(page.locator('.test-case-annotation')).toHaveText('skip: I am not interested in this test');
 });

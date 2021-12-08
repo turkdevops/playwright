@@ -81,7 +81,9 @@ export class Tracing implements InstrumentationListener, SnapshotterDelegate, Ha
       version: VERSION,
       type: 'context-options',
       browserName: this._context._browser.options.name,
-      options: this._context._options
+      options: this._context._options,
+      platform: process.platform,
+      wallTime: 0,
     };
   }
 
@@ -107,7 +109,7 @@ export class Tracing implements InstrumentationListener, SnapshotterDelegate, Ha
       this._harTracer.start();
   }
 
-  async startChunk() {
+  async startChunk(options: { title?: string } = {}) {
     if (this._state && this._state.recording)
       await this.stopChunk(false, false);
 
@@ -124,7 +126,7 @@ export class Tracing implements InstrumentationListener, SnapshotterDelegate, Ha
 
     this._appendTraceOperation(async () => {
       await mkdirIfNeeded(state.traceFile);
-      await fs.promises.appendFile(state.traceFile, JSON.stringify(this._contextCreatedEvent) + '\n');
+      await fs.promises.appendFile(state.traceFile, JSON.stringify({ ...this._contextCreatedEvent, title: options.title, wallTime: Date.now() }) + '\n');
     });
 
     this._context.instrumentation.addListener(this);
@@ -170,6 +172,18 @@ export class Tracing implements InstrumentationListener, SnapshotterDelegate, Ha
       throw new Error(`Tracing is already stopping`);
     this._isStopping = true;
 
+    if (!this._state || !this._state.recording) {
+      this._isStopping = false;
+      if (save)
+        throw new Error(`Must start tracing before stopping`);
+      return { artifact: null, entries: [] };
+    }
+
+    const state = this._state!;
+    this._context.instrumentation.removeListener(this);
+    if (this._state?.options.screenshots)
+      this._stopScreencast();
+
     for (const { sdkObject, metadata, beforeSnapshot, actionSnapshot, afterSnapshot } of this._pendingCalls.values()) {
       await Promise.all([beforeSnapshot, actionSnapshot, afterSnapshot]);
       let callMetadata = metadata;
@@ -183,17 +197,6 @@ export class Tracing implements InstrumentationListener, SnapshotterDelegate, Ha
       await this.onAfterCall(sdkObject, callMetadata);
     }
 
-    if (!this._state || !this._state.recording) {
-      this._isStopping = false;
-      if (save)
-        throw new Error(`Must start tracing before stopping`);
-      return { artifact: null, entries: [] };
-    }
-
-    const state = this._state!;
-    this._context.instrumentation.removeListener(this);
-    if (state.options.screenshots)
-      this._stopScreencast();
     if (state.options.snapshots)
       await this._snapshotter.stop();
 

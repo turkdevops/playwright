@@ -153,17 +153,11 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
     value: tOptional(tString),
     file: tOptional(tObject({
       name: tString,
-      mimeType: tString,
+      mimeType: tOptional(tString),
       buffer: tBinary,
     })),
   });
-  scheme.InterceptedResponse = tObject({
-    request: tChannel('Request'),
-    status: tNumber,
-    statusText: tString,
-    headers: tArray(tType('NameValue')),
-  });
-  scheme.FetchRequestFetchParams = tObject({
+  scheme.APIRequestContextFetchParams = tObject({
     url: tString,
     params: tOptional(tArray(tType('NameValue'))),
     method: tOptional(tString),
@@ -176,15 +170,18 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
     failOnStatusCode: tOptional(tBoolean),
     ignoreHTTPSErrors: tOptional(tBoolean),
   });
-  scheme.FetchRequestFetchResponseBodyParams = tObject({
+  scheme.APIRequestContextFetchResponseBodyParams = tObject({
     fetchUid: tString,
   });
-  scheme.FetchRequestStorageStateParams = tOptional(tObject({}));
-  scheme.FetchRequestDisposeFetchResponseParams = tObject({
+  scheme.APIRequestContextFetchLogParams = tObject({
     fetchUid: tString,
   });
-  scheme.FetchRequestDisposeParams = tOptional(tObject({}));
-  scheme.FetchResponse = tObject({
+  scheme.APIRequestContextStorageStateParams = tOptional(tObject({}));
+  scheme.APIRequestContextDisposeAPIResponseParams = tObject({
+    fetchUid: tString,
+  });
+  scheme.APIRequestContextDisposeParams = tOptional(tObject({}));
+  scheme.APIResponse = tObject({
     fetchUid: tString,
     url: tString,
     status: tNumber,
@@ -329,7 +326,6 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
     forcedColors: tOptional(tEnum(['active', 'none'])),
     acceptDownloads: tOptional(tBoolean),
     baseURL: tOptional(tString),
-    _debugName: tOptional(tString),
     recordVideo: tOptional(tObject({
       dir: tString,
       size: tOptional(tObject({
@@ -389,7 +385,6 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
     forcedColors: tOptional(tEnum(['active', 'none'])),
     acceptDownloads: tOptional(tBoolean),
     baseURL: tOptional(tString),
-    _debugName: tOptional(tString),
     recordVideo: tOptional(tObject({
       dir: tString,
       size: tOptional(tObject({
@@ -505,7 +500,9 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
     snapshots: tOptional(tBoolean),
     screenshots: tOptional(tBoolean),
   });
-  scheme.BrowserContextTracingStartChunkParams = tOptional(tObject({}));
+  scheme.BrowserContextTracingStartChunkParams = tObject({
+    title: tOptional(tString),
+  });
   scheme.BrowserContextTracingStopChunkParams = tObject({
     save: tBoolean,
     skipCompress: tBoolean,
@@ -701,6 +698,7 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
     trial: tOptional(tBoolean),
     sourcePosition: tOptional(tType('Point')),
     targetPosition: tOptional(tType('Point')),
+    strict: tOptional(tBoolean),
   });
   scheme.FrameDblclickParams = tObject({
     selector: tString,
@@ -1108,17 +1106,14 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
     method: tOptional(tString),
     headers: tOptional(tArray(tType('NameValue'))),
     postData: tOptional(tBinary),
-    interceptResponse: tOptional(tBoolean),
   });
   scheme.RouteFulfillParams = tObject({
     status: tOptional(tNumber),
     headers: tOptional(tArray(tType('NameValue'))),
     body: tOptional(tString),
     isBase64: tOptional(tBoolean),
-    useInterceptedResponseBody: tOptional(tBoolean),
     fetchResponseUid: tOptional(tString),
   });
-  scheme.RouteResponseBodyParams = tOptional(tObject({}));
   scheme.ResourceTiming = tObject({
     startTime: tNumber,
     domainLookupStart: tNumber,
@@ -1343,7 +1338,6 @@ export function createScheme(tChannel: (name: string) => Validator): Scheme {
     reducedMotion: tOptional(tEnum(['reduce', 'no-preference'])),
     forcedColors: tOptional(tEnum(['active', 'none'])),
     acceptDownloads: tOptional(tBoolean),
-    _debugName: tOptional(tString),
     recordVideo: tOptional(tObject({
       dir: tString,
       size: tOptional(tObject({

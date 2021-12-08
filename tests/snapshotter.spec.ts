@@ -142,7 +142,7 @@ it.describe('snapshots', () => {
     for (; ; ++counter) {
       snapshot = await snapshotter.captureSnapshot(toImpl(page), 'snapshot' + counter);
       const text = distillSnapshot(snapshot).replace(/frame@[^"]+["]/, '<id>"');
-      if (text === '<IFRAME src=\"/snapshot/<id>\"></IFRAME>')
+      if (text === '<IFRAME __playwright_src__=\"/snapshot/<id>\"></IFRAME>')
         break;
       await page.waitForTimeout(250);
     }
@@ -216,6 +216,7 @@ function distillSnapshot(snapshot, distillTarget = true) {
   if (distillTarget)
     html = html.replace(/\s__playwright_target__="[^"]+"/g, '');
   return html
+      .replace(/<style>\*,\*::before,\*::after { visibility: hidden }<\/style>/, '')
       .replace(/<script>[.\s\S]+<\/script>/, '')
       .replace(/<style>.*__playwright_target__.*<\/style>/, '')
       .replace(/<BASE href="about:blank">/, '')
